@@ -1,0 +1,154 @@
+name: Publish
+
+# Fires only when CI Gate finishes successfully on main/master.
+# This guarantees every release has passed all tests.
+on:
+  workflow_run:
+    workflows: ["CI Gate"]
+    types: [completed]
+    branches: [main, master]
+
+permissions:
+  contents: write   # required to create tags and GitHub releases
+
+jobs:
+
+  # ── 1. Compute CalVer version (runs once) ──────────────────────────────────
+  #
+  # Format: YYYY.M.D.<run-number>
+  # Examples: 2026.4.25.1  /  2026.12.1.42
+  # The run-number makes same-day releases unique and strictly increasing.
+  # ──────────────────────────────────────────────────────────────────────────
+  version:
+    name: Compute version
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calver.outputs.version }}
+
+    steps:
+      - name: Compute CalVer
+        id: calver
+        run: |
+          VERSION="$(date -u +'%Y.%-m.%-d').${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+  # ── 2. Build, sign, and package for each Windows target ───────────────────
+  #
+  # Signing requires two repository secrets:
+  #   SIGNING_CERT_BASE64  — PFX certificate encoded as base64
+  #                          (openssl pkcs12 -export ... | base64 -w 0)
+  #   SIGNING_CERT_PASSWORD — passphrase for that PFX
+  #
+  # The signing step is skipped automatically if those secrets are absent,
+  # so forks and fresh checkouts still produce unsigned builds.
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.rid }})
+    needs: version
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid:   win-x64
+            label: Windows x64
+          - rid:   win-arm64
+            label: Windows ARM64
+
+    steps:
+      - name: Checkout (pinned to the commit that passed CI)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: |
+          dotnet publish voxto/voxto.csproj `
+            --configuration Release `
+            --runtime ${{ matrix.rid }} `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version="${{ needs.version.outputs.version }}" `
+            -p:AssemblyVersion="${{ needs.version.outputs.version }}" `
+            -p:FileVersion="${{ needs.version.outputs.version }}" `
+            --output publish/${{ matrix.rid }}
+
+      # ── Code signing ────────────────────────────────────────────────────
+      - name: Sign executable
+        if: env.CERT != ''
+        env:
+          CERT:     ${{ secrets.SIGNING_CERT_BASE64 }}
+          CERT_PWD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          # Write PFX from base64 secret
+          $pfxPath = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT))
+
+          # Locate latest signtool from the pre-installed Windows SDK
+          $signtool = Get-ChildItem `
+            "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "x64" } |
+            Sort-Object FullName |
+            Select-Object -Last 1 -ExpandProperty FullName
+
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          & $signtool sign `
+            /f  $pfxPath `
+            /p  $env:CERT_PWD `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            /fd sha256 `
+            /v  "publish/${{ matrix.rid }}/voxto.exe"
+
+          # Remove PFX immediately — don't leave it in the workspace
+          Remove-Item $pfxPath -Force
+
+      # ── Package ─────────────────────────────────────────────────────────
+      - name: Zip
+        shell: pwsh
+        run: |
+          $zip = "voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip"
+          Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath $zip
+          Write-Output "Created $zip ($('{0:N0}' -f (Get-Item $zip).Length) bytes)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxto-${{ matrix.rid }}
+          path: voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip
+          if-no-files-found: error
+
+  # ── 3. Create GitHub Release ───────────────────────────────────────────────
+  release:
+    name: Release v${{ needs.version.outputs.version }}
+    needs: [version, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: List release assets
+        run: ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:               v${{ needs.version.outputs.version }}
+          name:                   v${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files:                  dist/*.zip
