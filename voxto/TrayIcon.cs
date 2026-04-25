@@ -17,16 +17,21 @@ public class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly RecorderService _recorder;
+    private readonly OutputManager _outputManager;
     private AppSettings _settings;
     private GlobalHotkey? _hotkey;
-    private OverlayWindow? _overlay;
+    private OverlayWindow? _overlay;             // persistent: recording + model download
+    private OverlayWindow? _notificationOverlay; // transient: auto-dismiss notifications
     private DispatcherTimer? _notificationTimer;
     private bool _isRecording;
 
-    private ToolStripMenuItem _startItem = null!;
-    private ToolStripMenuItem _stopItem  = null!;
-    private ToolStripMenuItem _modelMenu = null!;
+    private ToolStripMenuItem _startItem      = null!;
+    private ToolStripMenuItem _stopItem       = null!;
+    private ToolStripMenuItem _modelMenu      = null!;
     private ToolStripMenuItem _hotkeyModeMenu = null!;
+    private ToolStripMenuItem _outputMenu     = null!;
+    private ToolStripMenuItem _todoSetFileItem = null!;
+    private ToolStripMenuItem _startupItem    = null!;
 
     // ── Tray icon colours (GDI) ───────────────────────────────────────────────
     private static readonly Color IdleColor         = Color.FromArgb(34,  197, 94);  // green
@@ -34,15 +39,17 @@ public class TrayIcon : IDisposable
     private static readonly Color TranscribingColor = Color.FromArgb(234, 179, 8);   // amber
 
     // ── Pill dot colours (WPF Media) ─────────────────────────────────────────
-    private static readonly WpfColor PillGreen  = WpfColor.FromRgb(34,  197, 94);   // success
-    private static readonly WpfColor PillRed    = WpfColor.FromRgb(220, 38,  38);   // error
-    private static readonly WpfColor PillAmber  = WpfColor.FromRgb(234, 179, 8);    // info / busy
+    private static readonly WpfColor PillGreen = WpfColor.FromRgb(34,  197, 94);
+    private static readonly WpfColor PillRed   = WpfColor.FromRgb(220, 38,  38);
+    private static readonly WpfColor PillAmber = WpfColor.FromRgb(234, 179, 8);
 
     /// <summary>Creates the tray icon, builds the context menu, and registers the hotkey.</summary>
     public TrayIcon()
     {
-        _settings = AppSettings.Load();
-        _recorder = new RecorderService(_settings);
+        _settings      = AppSettings.Load();
+        _outputManager = new OutputManager();
+        _recorder      = new RecorderService(_settings, _outputManager);
+
         _recorder.TranscriptionCompleted += OnTranscriptionCompleted;
         _recorder.TranscriptionFailed    += OnTranscriptionFailed;
         _recorder.ModelDownloadStarted   += OnModelDownloadStarted;
@@ -71,7 +78,7 @@ public class TrayIcon : IDisposable
         _stopItem  = new ToolStripMenuItem("⏹  Stop Recording",  null, (_, _) => ToggleRecording())
             { Enabled = false };
 
-        // Model submenu — Tag stores the raw model name for reliable check-mark updates.
+        // Model submenu
         _modelMenu = new ToolStripMenuItem("🤖  Model");
         foreach (var name in new[] { "Tiny", "Small", "Medium", "LargeV3Turbo" })
         {
@@ -85,19 +92,46 @@ public class TrayIcon : IDisposable
             _modelMenu.DropDownItems.Add(item);
         }
 
-        // Hotkey mode submenu — Tag stores the HotkeyMode enum value.
+        // Hotkey mode submenu
         _hotkeyModeMenu = new ToolStripMenuItem("⌨  Hotkey Mode");
         AddHotkeyModeItem("Toggle – press once to start/stop", HotkeyMode.Toggle);
         AddHotkeyModeItem("Push-to-talk – hold to record",     HotkeyMode.PushToTalk);
+
+        // Output submenu — built from the OutputManager registry
+        _outputMenu = new ToolStripMenuItem("📤  Output");
+        foreach (var output in _outputManager.All)
+        {
+            var id = output.Id;
+            var item = new ToolStripMenuItem(output.DisplayName)
+            {
+                Tag     = id,
+                Checked = _settings.EnabledOutputs.Contains(id)
+            };
+            item.Click += (_, _) => ToggleOutput(id);
+            _outputMenu.DropDownItems.Add(item);
+        }
+        _outputMenu.DropDownItems.Add(new ToolStripSeparator());
+        _todoSetFileItem = new ToolStripMenuItem("📄  Set Todo file…", null, OnSetTodoFile)
+        {
+            Enabled = _settings.EnabledOutputs.Contains("TodoAppend")
+        };
+        _outputMenu.DropDownItems.Add(_todoSetFileItem);
 
         menu.Items.Add(_startItem);
         menu.Items.Add(_stopItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_modelMenu);
         menu.Items.Add(_hotkeyModeMenu);
+        menu.Items.Add(_outputMenu);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("📁  Set Output Folder…", null, OnSetOutputFolder));
         menu.Items.Add(new ToolStripMenuItem("📂  Open Output Folder",  null, OnOpenFolder));
+        menu.Items.Add(new ToolStripSeparator());
+        _startupItem = new ToolStripMenuItem("Run at startup", null, OnToggleStartup)
+        {
+            Checked = StartupManager.IsEnabled()
+        };
+        menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("✖  Exit", null, OnExit));
 
@@ -137,9 +171,7 @@ public class TrayIcon : IDisposable
         if (_isRecording) return;
         _isRecording = true;
 
-        // Cancel any auto-dismiss notification that may still be visible.
         DismissNotificationPill();
-
         SetState(recording: true);
 
         _overlay = new OverlayWindow();
@@ -209,6 +241,52 @@ public class TrayIcon : IDisposable
         ShowNotificationPill($"Hotkey: {label} ✓", PillAmber, durationMs: 2500);
     }
 
+    private void ToggleOutput(string outputId)
+    {
+        if (_settings.EnabledOutputs.Contains(outputId))
+            _settings.EnabledOutputs.Remove(outputId);
+        else
+            _settings.EnabledOutputs.Add(outputId);
+
+        _settings.Save();
+        _recorder.UpdateSettings(_settings);
+
+        // Sync check marks (DropDownItems also contains separators — skip them)
+        foreach (var item in _outputMenu.DropDownItems.OfType<ToolStripMenuItem>())
+        {
+            if (item.Tag is string id)
+                item.Checked = _settings.EnabledOutputs.Contains(id);
+        }
+
+        // Enable/disable the "Set Todo file…" item
+        _todoSetFileItem.Enabled = _settings.EnabledOutputs.Contains("TodoAppend");
+
+        var output = _outputManager.All.FirstOrDefault(o => o.Id == outputId);
+        var state  = _settings.EnabledOutputs.Contains(outputId) ? "on" : "off";
+        ShowNotificationPill($"Output {state}: {output?.DisplayName ?? outputId}", PillAmber, durationMs: 2500);
+    }
+
+    private void OnSetTodoFile(object? sender, EventArgs e)
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Title            = "Choose Todo file",
+            Filter           = "Markdown files (*.md)|*.md|All files (*.*)|*.*",
+            FileName         = Path.GetFileName(_settings.TodoFilePath),
+            InitialDirectory = Path.GetDirectoryName(_settings.TodoFilePath)
+                               ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            OverwritePrompt  = false  // file is appended, not overwritten
+        };
+
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+            _settings.TodoFilePath = dialog.FileName;
+            _settings.Save();
+            _recorder.UpdateSettings(_settings);
+            ShowNotificationPill("Todo file updated ✓", PillAmber, durationMs: 2500);
+        }
+    }
+
     private void OnSetOutputFolder(object? sender, EventArgs e)
     {
         using var dialog = new FolderBrowserDialog
@@ -223,7 +301,6 @@ public class TrayIcon : IDisposable
             _settings.OutputFolder = dialog.SelectedPath;
             _settings.Save();
             _recorder.UpdateSettings(_settings);
-
             ShowNotificationPill("Output folder updated ✓", PillAmber, durationMs: 2500);
         }
     }
@@ -235,9 +312,25 @@ public class TrayIcon : IDisposable
         System.Diagnostics.Process.Start("explorer.exe", folder);
     }
 
+    private void OnToggleStartup(object? sender, EventArgs e)
+    {
+        if (StartupManager.IsEnabled())
+        {
+            StartupManager.Disable();
+            _startupItem.Checked = false;
+            ShowNotificationPill("Removed from startup ✓", PillAmber, durationMs: 2500);
+        }
+        else
+        {
+            StartupManager.Enable();
+            _startupItem.Checked = true;
+            ShowNotificationPill("Added to startup ✓", PillAmber, durationMs: 2500);
+        }
+    }
+
     // ── Callbacks ─────────────────────────────────────────────────────────────
 
-    private void OnTranscriptionCompleted(string outputPath)
+    private void OnTranscriptionCompleted()
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -281,20 +374,18 @@ public class TrayIcon : IDisposable
     // ── Pill notifications ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Shows the overlay pill with <paramref name="message"/> and auto-dismisses it after
-    /// <paramref name="durationMs"/> milliseconds. Safe to call while recording — the call
-    /// is ignored so the recording pill is never interrupted.
+    /// Shows a transient notification pill that auto-dismisses after <paramref name="durationMs"/>
+    /// milliseconds. If another notification is already visible it is replaced immediately.
+    /// Ignored while the persistent recording or download pill is up.
     /// </summary>
     private void ShowNotificationPill(string message, WpfColor dotColor, int durationMs = 3000)
     {
-        // Don't disturb the persistent recording or download pill.
         if (_isRecording || _overlay != null) return;
 
-        // Cancel any previous auto-dismiss that is still pending.
         DismissNotificationPill();
 
-        _overlay = new OverlayWindow(message, dotColor);
-        _overlay.Show();
+        _notificationOverlay = new OverlayWindow(message, dotColor);
+        _notificationOverlay.Show();
 
         _notificationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(durationMs) };
         _notificationTimer.Tick += (_, _) => DismissNotificationPill();
@@ -305,8 +396,8 @@ public class TrayIcon : IDisposable
     {
         _notificationTimer?.Stop();
         _notificationTimer = null;
-        _overlay?.Close();
-        _overlay = null;
+        _notificationOverlay?.Close();
+        _notificationOverlay = null;
     }
 
     // ── UI state ─────────────────────────────────────────────────────────────
@@ -352,6 +443,7 @@ public class TrayIcon : IDisposable
         _hotkey?.Dispose();
         _recorder.Dispose();
         _overlay?.Close();
+        _notificationOverlay?.Close();
         _notifyIcon.Visible = false;
         Application.Current.Shutdown();
     }
@@ -362,6 +454,7 @@ public class TrayIcon : IDisposable
         _notificationTimer?.Stop();
         _hotkey?.Dispose();
         _overlay?.Close();
+        _notificationOverlay?.Close();
         _notifyIcon.Dispose();
         _recorder.Dispose();
     }

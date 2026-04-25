@@ -49,6 +49,19 @@ public class AppSettings
     public int HotkeyVirtualKey { get; set; } = 0x78;
 
     /// <summary>
+    /// IDs of the <see cref="ITranscriptionOutput"/> implementations that are currently enabled.
+    /// Defaults to <c>["MarkdownFile"]</c> (one file per recording).
+    /// </summary>
+    public List<string> EnabledOutputs { get; set; } = ["MarkdownFile"];
+
+    /// <summary>
+    /// Path of the single Markdown file used by the Todo output.
+    /// Defaults to <c>Documents\Voxto\todo.md</c>.
+    /// </summary>
+    public string TodoFilePath { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto", "todo.md");
+
+    /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.
     /// </summary>
     /// <param name="path">

@@ -7,22 +7,23 @@ namespace Voxto;
 
 /// <summary>
 /// Manages audio capture via NAudio and speech-to-text via Whisper.net.
-/// Call <see cref="StartRecordingAsync"/> to begin recording and
-/// <see cref="StopAndTranscribeAsync"/> to stop and produce a Markdown file.
+/// After transcription completes the result is forwarded to every enabled
+/// <see cref="ITranscriptionOutput"/> via <see cref="OutputManager"/>.
 /// </summary>
 public class RecorderService : IDisposable
 {
     private AppSettings _settings;
+    private readonly OutputManager _outputManager;
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
     private string? _tempWavPath;
     private bool _isRecording;
 
-    /// <summary>Raised when transcription succeeds; argument is the output file path.</summary>
-    public event Action<string>? TranscriptionCompleted;
+    /// <summary>Raised when all enabled outputs have been written successfully.</summary>
+    public event Action? TranscriptionCompleted;
 
-    /// <summary>Raised when transcription fails; argument is the error message.</summary>
+    /// <summary>Raised when transcription or any output fails; argument is the error message.</summary>
     public event Action<string>? TranscriptionFailed;
 
     /// <summary>
@@ -35,10 +36,11 @@ public class RecorderService : IDisposable
     /// <summary>Raised once the model file has finished downloading.</summary>
     public event Action? ModelDownloadFinished;
 
-    /// <summary>Initialises the service with the provided settings.</summary>
-    public RecorderService(AppSettings settings)
+    /// <summary>Initialises the service with the provided settings and output pipeline.</summary>
+    public RecorderService(AppSettings settings, OutputManager outputManager)
     {
-        _settings = settings;
+        _settings      = settings;
+        _outputManager = outputManager;
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
@@ -56,7 +58,6 @@ public class RecorderService : IDisposable
             return Task.CompletedTask;
 
         _isRecording = true;
-        Directory.CreateDirectory(_settings.OutputFolder);
 
         _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
 
@@ -75,7 +76,7 @@ public class RecorderService : IDisposable
     }
 
     /// <summary>
-    /// Stops recording, runs Whisper transcription on the captured audio, and writes a Markdown file.
+    /// Stops recording, runs Whisper transcription, and forwards the result to all enabled outputs.
     /// Raises either <see cref="TranscriptionCompleted"/> or <see cref="TranscriptionFailed"/> when done.
     /// </summary>
     public async Task StopAndTranscribeAsync()
@@ -99,8 +100,13 @@ public class RecorderService : IDisposable
 
         try
         {
-            var outputPath = await TranscribeAsync(_tempWavPath!);
-            TranscriptionCompleted?.Invoke(outputPath);
+            await TranscribeAsync(_tempWavPath!);
+            TranscriptionCompleted?.Invoke();
+        }
+        catch (AggregateException aex)
+        {
+            var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
+            TranscriptionFailed?.Invoke(msg);
         }
         catch (Exception ex)
         {
@@ -116,7 +122,7 @@ public class RecorderService : IDisposable
 
     // ── Transcription ────────────────────────────────────────────────────────
 
-    private async Task<string> TranscribeAsync(string wavPath)
+    private async Task TranscribeAsync(string wavPath)
     {
         var modelPath = await EnsureModelDownloadedAsync();
 
@@ -131,9 +137,13 @@ public class RecorderService : IDisposable
         await foreach (var seg in processor.ProcessAsync(fileStream))
             segments.Add((seg.Start, seg.End, seg.Text.Trim()));
 
-        var outputPath = BuildOutputPath();
-        File.WriteAllText(outputPath, MarkdownFormatter.Format(segments, DateTime.Now));
-        return outputPath;
+        var result = new TranscriptionResult
+        {
+            Timestamp = DateTime.Now,
+            Segments  = segments
+        };
+
+        await _outputManager.WriteAsync(result, _settings);
     }
 
     private async Task<string> EnsureModelDownloadedAsync()
@@ -174,19 +184,6 @@ public class RecorderService : IDisposable
         }
 
         return modelPath;
-    }
-
-    // ── Output path ──────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Builds a timestamped output path inside the configured output folder.
-    /// Exposed as <c>internal</c> so it can be exercised by unit tests.
-    /// </summary>
-    internal string BuildOutputPath()
-    {
-        Directory.CreateDirectory(_settings.OutputFolder);
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        return Path.Combine(_settings.OutputFolder, $"transcription_{timestamp}.md");
     }
 
     /// <inheritdoc/>
