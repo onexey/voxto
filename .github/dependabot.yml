@@ -37,7 +37,6 @@ updates:
         update-types:
           - minor
           - patch
-    versioning-strategy: auto
     open-pull-requests-limit: 10
     labels:
       - dependencies
@@ -60,7 +59,6 @@ updates:
         update-types:
           - minor
           - patch
-    versioning-strategy: auto
     open-pull-requests-limit: 10
     labels:
       - dependencies
