@@ -111,6 +111,17 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void Save_MissingDirectory_CreatesParentDirectory()
+    {
+        var nestedFile = Path.Combine(_tempDir, "nested", "settings", "settings.json");
+        var settings   = new AppSettings();
+
+        settings.Save(nestedFile);
+
+        Assert.True(File.Exists(nestedFile));
+    }
+
+    [Fact]
     public void Save_WritesValidJson()
     {
         var settings = new AppSettings();
