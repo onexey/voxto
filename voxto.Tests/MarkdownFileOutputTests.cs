@@ -95,7 +95,9 @@ public class MarkdownFileOutputTests : IDisposable
         await _output.WriteAsync(result, Settings());
 
         var content = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir, "*.md").Single());
-        Assert.Equal(MarkdownFormatter.Format(result.Segments, result.Timestamp), content);
+        Assert.Equal(
+            NormalizeLineEndings(MarkdownFormatter.Format(result.Segments, result.Timestamp)),
+            NormalizeLineEndings(content));
     }
 
     // ── Directory creation ────────────────────────────────────────────────────
@@ -120,4 +122,7 @@ public class MarkdownFileOutputTests : IDisposable
 
     [Fact]
     public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+
+    private static string NormalizeLineEndings(string value) =>
+        value.Replace("\r\n", "\n", StringComparison.Ordinal);
 }

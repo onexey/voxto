@@ -82,11 +82,12 @@ public class TodoAppendOutputTests : IDisposable
         {
             Timestamp = new DateTime(2026, 4, 25, 17, 32, 0),
             Segments =
-            [
+            new (TimeSpan Start, TimeSpan End, string Text)[]
+            {
                 (TimeSpan.Zero, TimeSpan.FromSeconds(1), "  First  "),
                 (TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), " "),
                 (TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), "Second")
-            ]
+            }
         };
 
         await _output.WriteAsync(result, Settings());

@@ -124,8 +124,8 @@ public class OutputManagerTests
     {
         var manager = new OutputManager();
 
-        Assert.Contains(manager.All, output => output.Id == "MarkdownFile");
-        Assert.Contains(manager.All, output => output.Id == "TodoAppend");
+        Assert.Contains(manager.All, output => output is MarkdownFileOutput);
+        Assert.Contains(manager.All, output => output is TodoAppendOutput);
     }
 
     // ── Test doubles ──────────────────────────────────────────────────────────
