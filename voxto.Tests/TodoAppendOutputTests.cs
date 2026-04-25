@@ -76,6 +76,26 @@ public class TodoAppendOutputTests : IDisposable
     }
 
     [Fact]
+    public async Task WriteAsync_MultipleSegments_UsesTrimmedFullText()
+    {
+        var result = new TranscriptionResult
+        {
+            Timestamp = new DateTime(2026, 4, 25, 17, 32, 0),
+            Segments =
+            [
+                (TimeSpan.Zero, TimeSpan.FromSeconds(1), "  First  "),
+                (TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), " "),
+                (TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), "Second")
+            ]
+        };
+
+        await _output.WriteAsync(result, Settings());
+
+        var line = (await File.ReadAllTextAsync(TodoFile)).TrimEnd();
+        Assert.Equal("[ ] First Second @25.04.2026 17:32", line);
+    }
+
+    [Fact]
     public async Task WriteAsync_ExistingContent_IsNotOverwritten()
     {
         await File.WriteAllTextAsync(TodoFile, $"[ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}");

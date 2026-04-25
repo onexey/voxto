@@ -88,6 +88,16 @@ public class MarkdownFileOutputTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(content));
     }
 
+    [Fact]
+    public async Task WriteAsync_FileContentMatchesMarkdownFormatterOutput()
+    {
+        var result = Result();
+        await _output.WriteAsync(result, Settings());
+
+        var content = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir, "*.md").Single());
+        Assert.Equal(MarkdownFormatter.Format(result.Segments, result.Timestamp), content);
+    }
+
     // ── Directory creation ────────────────────────────────────────────────────
 
     [Fact]

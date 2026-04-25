@@ -119,6 +119,15 @@ public class OutputManagerTests
         Assert.Equal(2, manager.All.Count);
     }
 
+    [Fact]
+    public void DefaultConstructor_RegistersBuiltInOutputs()
+    {
+        var manager = new OutputManager();
+
+        Assert.Contains(manager.All, output => output.Id == "MarkdownFile");
+        Assert.Contains(manager.All, output => output.Id == "TodoAppend");
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class SpyOutput(string id) : ITranscriptionOutput
