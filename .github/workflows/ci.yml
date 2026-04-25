@@ -1,0 +1,70 @@
+name: CI Gate
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  # ── Test jobs ────────────────────────────────────────────────────────────────
+  # Each entry in the matrix runs in parallel. Add future test projects here.
+  tests:
+    name: "Test: ${{ matrix.name }}"
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false   # let all projects run even if one fails
+      matrix:
+        include:
+          - name:    voxto.Tests
+            project: voxto.Tests/voxto.Tests.csproj
+          # — add more test projects here, e.g.:
+          # - name:    voxto.Integration.Tests
+          #   project: voxto.Integration.Tests/voxto.Integration.Tests.csproj
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore ${{ matrix.project }}
+
+      - name: Build
+        run: dotnet build ${{ matrix.project }} --no-restore --configuration Release
+
+      - name: Test
+        run: >
+          dotnet test ${{ matrix.project }}
+          --no-build
+          --configuration Release
+          --logger "trx;LogFileName=results.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}
+          path: TestResults/results.trx
+
+  # ── Gate job ─────────────────────────────────────────────────────────────────
+  # This is the single status check to add to your branch protection rule.
+  # It passes only when every test job above passes.
+  ci-gate:
+    name: CI Gate
+    needs: tests
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: All tests passed
+        run: |
+          if [[ "${{ needs.tests.result }}" != "success" ]]; then
+            echo "One or more test jobs failed."
+            exit 1
+          fi
+          echo "All test jobs passed."
