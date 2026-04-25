@@ -1,0 +1,87 @@
+using System.IO;
+using System.Text.Json;
+
+namespace Voxto;
+
+/// <summary>
+/// Hotkey behaviour modes available to the user.
+/// </summary>
+public enum HotkeyMode
+{
+    /// <summary>Press the hotkey once to start recording; press again to stop.</summary>
+    Toggle,
+
+    /// <summary>Hold the hotkey to record; release to stop and transcribe.</summary>
+    PushToTalk
+}
+
+/// <summary>
+/// Persisted user preferences for Voxto.
+/// Settings are stored as JSON in <c>%LocalAppData%\Voxto\settings.json</c>.
+/// </summary>
+public class AppSettings
+{
+    internal static readonly string DefaultSettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Voxto", "settings.json");
+
+    /// <summary>
+    /// Folder where transcription Markdown files are saved.
+    /// Defaults to <c>Documents\Voxto</c>.
+    /// </summary>
+    public string OutputFolder { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto");
+
+    /// <summary>
+    /// Whisper model to use for transcription.
+    /// Valid values: <c>"Tiny"</c>, <c>"Small"</c>, <c>"Medium"</c>, <c>"LargeV3Turbo"</c>.
+    /// Defaults to <c>"Small"</c>.
+    /// </summary>
+    public string ModelType { get; set; } = "Small";
+
+    /// <summary>Hotkey behaviour: Toggle or Push-to-talk. Defaults to Toggle.</summary>
+    public HotkeyMode HotkeyMode { get; set; } = HotkeyMode.Toggle;
+
+    /// <summary>
+    /// Virtual-key code for the global hotkey.
+    /// Defaults to <c>0x78</c> (F9).
+    /// </summary>
+    public int HotkeyVirtualKey { get; set; } = 0x78;
+
+    /// <summary>
+    /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.
+    /// </summary>
+    /// <param name="path">
+    /// Optional override path — used by unit tests to avoid touching the real settings file.
+    /// Pass <c>null</c> (default) to use the standard <c>%LocalAppData%</c> location.
+    /// </param>
+    public static AppSettings Load(string? path = null)
+    {
+        var settingsPath = path ?? DefaultSettingsPath;
+        try
+        {
+            if (File.Exists(settingsPath))
+            {
+                var json = File.ReadAllText(settingsPath);
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+        }
+        catch { /* fall through to defaults */ }
+        return new AppSettings();
+    }
+
+    /// <summary>
+    /// Persists the current settings to disk as indented JSON.
+    /// </summary>
+    /// <param name="path">
+    /// Optional override path — used by unit tests to avoid touching the real settings file.
+    /// Pass <c>null</c> (default) to use the standard <c>%LocalAppData%</c> location.
+    /// </param>
+    public void Save(string? path = null)
+    {
+        var settingsPath = path ?? DefaultSettingsPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(settingsPath, json);
+    }
+}
