@@ -1,0 +1,70 @@
+version: 2
+
+updates:
+
+  # ── GitHub Actions ───────────────────────────────────────────────────────────
+  # Keeps action versions (actions/checkout, actions/setup-dotnet, etc.) current.
+  # All actions are grouped into one PR to minimise noise.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    groups:
+      actions-all:
+        patterns: ["*"]
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci"
+
+  # ── NuGet — main project ─────────────────────────────────────────────────────
+  # Covers Whisper.net, NAudio, and any future packages in voxto.csproj.
+  # Minor + patch updates are batched together; majors get individual PRs
+  # so breaking changes are always reviewed separately.
+  - package-ecosystem: nuget
+    directory: /voxto
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    groups:
+      nuget-minor-patch:
+        update-types:
+          - minor
+          - patch
+    versioning-strategy: auto
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - dotnet
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── NuGet — test project ──────────────────────────────────────────────────────
+  # Covers xunit, Microsoft.NET.Test.Sdk, and test runners.
+  # Same grouping policy as the main project.
+  - package-ecosystem: nuget
+    directory: /voxto.Tests
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    groups:
+      nuget-test-minor-patch:
+        update-types:
+          - minor
+          - patch
+    versioning-strategy: auto
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - dotnet
+      - tests
+    commit-message:
+      prefix: "chore(deps)"
