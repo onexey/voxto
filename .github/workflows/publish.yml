@@ -74,8 +74,6 @@ jobs:
             --configuration Release `
             --runtime ${{ matrix.rid }} `
             --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:Version="${{ needs.version.outputs.version }}" `
             -p:AssemblyVersion="${{ needs.version.outputs.version }}" `
             -p:FileVersion="${{ needs.version.outputs.version }}" `
@@ -109,7 +107,7 @@ jobs:
             /tr http://timestamp.digicert.com `
             /td sha256 `
             /fd sha256 `
-            /v  "publish/${{ matrix.rid }}/voxto.exe"
+            /v  "publish\${{ matrix.rid }}\voxto.exe"
 
           # Remove PFX immediately — don't leave it in the workspace
           Remove-Item $pfxPath -Force
@@ -119,8 +117,10 @@ jobs:
         shell: pwsh
         run: |
           $zip = "voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip"
-          Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath $zip
-          Write-Output "Created $zip ($('{0:N0}' -f (Get-Item $zip).Length) bytes)"
+          # Include the full directory so native Whisper DLLs are alongside the exe
+          Compress-Archive -Path "publish\${{ matrix.rid }}\*" -DestinationPath $zip
+          $size = '{0:N0}' -f (Get-Item $zip).Length
+          Write-Output "Created $zip ($size bytes)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
