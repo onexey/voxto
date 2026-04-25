@@ -1,24 +1,40 @@
 using System.Windows;
+using System.Windows.Media;
+using Color = System.Windows.Media.Color;
 
 namespace Voxto;
 
 /// <summary>
-/// A small always-on-top overlay window shown in the bottom-right corner while recording is active.
-/// The window is non-interactive (IsHitTestVisible = false in XAML) so it never steals focus.
+/// A small always-on-top pill shown in the bottom-right corner to communicate app state.
+/// Non-interactive (IsHitTestVisible = false in XAML) so it never steals focus.
 /// </summary>
 public partial class OverlayWindow : Window
 {
-    /// <summary>Initialises the overlay and positions it in the bottom-right of the work area.</summary>
-    public OverlayWindow()
+    /// <summary>
+    /// Creates the overlay pill.
+    /// </summary>
+    /// <param name="message">Text displayed inside the pill.</param>
+    /// <param name="dotColor">
+    /// Colour of the pulsing status dot.
+    /// Defaults to red (<c>#EF4444</c>) — the recording colour.
+    /// </param>
+    public OverlayWindow(string message = "Recording…", Color? dotColor = null)
     {
         InitializeComponent();
-        PositionBottomRight();
+
+        MessageText.Text = message;
+
+        if (dotColor.HasValue)
+            StatusDot.Fill = new SolidColorBrush(dotColor.Value);
     }
+
+    // Position after layout is complete so SizeToContent has resolved the actual width.
+    private void OnContentRendered(object sender, EventArgs e) => PositionBottomRight();
 
     private void PositionBottomRight()
     {
         var screen = SystemParameters.WorkArea;
-        Left = screen.Right - Width - 16;
-        Top  = screen.Bottom - Height - 16;
+        Left = screen.Right - ActualWidth - 16;
+        Top  = screen.Bottom - ActualHeight - 16;
     }
 }

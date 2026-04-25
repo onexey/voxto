@@ -25,6 +25,16 @@ public class RecorderService : IDisposable
     /// <summary>Raised when transcription fails; argument is the error message.</summary>
     public event Action<string>? TranscriptionFailed;
 
+    /// <summary>
+    /// Raised just before a model file is downloaded for the first time.
+    /// The argument is the human-readable model name (e.g. <c>"Small"</c>).
+    /// Not raised on subsequent runs when the cached file already exists.
+    /// </summary>
+    public event Action<string>? ModelDownloadStarted;
+
+    /// <summary>Raised once the model file has finished downloading.</summary>
+    public event Action? ModelDownloadFinished;
+
     /// <summary>Initialises the service with the provided settings.</summary>
     public RecorderService(AppSettings settings)
     {
@@ -147,9 +157,20 @@ public class RecorderService : IDisposable
 
         if (!File.Exists(modelPath))
         {
-            using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(ggmlType);
-            using var fileStream  = File.OpenWrite(modelPath);
-            await modelStream.CopyToAsync(fileStream);
+            ModelDownloadStarted?.Invoke(_settings.ModelType);
+            try
+            {
+                using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(ggmlType);
+                using var fileStream  = File.OpenWrite(modelPath);
+                await modelStream.CopyToAsync(fileStream);
+            }
+            catch
+            {
+                // Remove partial file so the next run retries the download.
+                if (File.Exists(modelPath)) File.Delete(modelPath);
+                throw;
+            }
+            ModelDownloadFinished?.Invoke();
         }
 
         return modelPath;

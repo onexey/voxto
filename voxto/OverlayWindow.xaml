@@ -1,24 +1,28 @@
 <Window x:Class="Voxto.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Recording"
-        Width="160" Height="40"
+        Title="Voxto"
+        SizeToContent="Width"
+        MinWidth="160"
+        Height="40"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        IsHitTestVisible="False">
+        IsHitTestVisible="False"
+        ContentRendered="OnContentRendered">
 
     <Border CornerRadius="8"
             Background="#CC1a1a1a"
             BorderBrush="#FF444444"
             BorderThickness="1"
-            Padding="10,6">
+            Padding="12,6">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <!-- Pulsing red dot -->
-            <Ellipse Width="10" Height="10"
+            <!-- Pulsing status dot — colour set from code-behind -->
+            <Ellipse x:Name="StatusDot"
+                     Width="10" Height="10"
                      Fill="#FFEF4444"
                      VerticalAlignment="Center"
                      Margin="0,0,8,0">
@@ -35,7 +39,9 @@
                     </EventTrigger>
                 </Ellipse.Triggers>
             </Ellipse>
-            <TextBlock Text="Recording..."
+            <!-- Message text — set from code-behind -->
+            <TextBlock x:Name="MessageText"
+                       Text="Recording…"
                        Foreground="White"
                        FontSize="12"
                        FontFamily="Segoe UI"

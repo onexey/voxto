@@ -2,7 +2,9 @@ using System.IO;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Windows;
-using Application = System.Windows.Application;
+using System.Windows.Threading;
+using Application  = System.Windows.Application;
+using WpfColor     = System.Windows.Media.Color;
 
 namespace Voxto;
 
@@ -18,6 +20,7 @@ public class TrayIcon : IDisposable
     private AppSettings _settings;
     private GlobalHotkey? _hotkey;
     private OverlayWindow? _overlay;
+    private DispatcherTimer? _notificationTimer;
     private bool _isRecording;
 
     private ToolStripMenuItem _startItem = null!;
@@ -25,10 +28,15 @@ public class TrayIcon : IDisposable
     private ToolStripMenuItem _modelMenu = null!;
     private ToolStripMenuItem _hotkeyModeMenu = null!;
 
-    // Tray icon colours — kept as named constants so SetState is self-documenting.
+    // ── Tray icon colours (GDI) ───────────────────────────────────────────────
     private static readonly Color IdleColor         = Color.FromArgb(34,  197, 94);  // green
     private static readonly Color RecordingColor    = Color.FromArgb(220, 38,  38);  // red
     private static readonly Color TranscribingColor = Color.FromArgb(234, 179, 8);   // amber
+
+    // ── Pill dot colours (WPF Media) ─────────────────────────────────────────
+    private static readonly WpfColor PillGreen  = WpfColor.FromRgb(34,  197, 94);   // success
+    private static readonly WpfColor PillRed    = WpfColor.FromRgb(220, 38,  38);   // error
+    private static readonly WpfColor PillAmber  = WpfColor.FromRgb(234, 179, 8);    // info / busy
 
     /// <summary>Creates the tray icon, builds the context menu, and registers the hotkey.</summary>
     public TrayIcon()
@@ -37,6 +45,8 @@ public class TrayIcon : IDisposable
         _recorder = new RecorderService(_settings);
         _recorder.TranscriptionCompleted += OnTranscriptionCompleted;
         _recorder.TranscriptionFailed    += OnTranscriptionFailed;
+        _recorder.ModelDownloadStarted   += OnModelDownloadStarted;
+        _recorder.ModelDownloadFinished  += OnModelDownloadFinished;
 
         _notifyIcon = new NotifyIcon
         {
@@ -127,6 +137,9 @@ public class TrayIcon : IDisposable
         if (_isRecording) return;
         _isRecording = true;
 
+        // Cancel any auto-dismiss notification that may still be visible.
+        DismissNotificationPill();
+
         SetState(recording: true);
 
         _overlay = new OverlayWindow();
@@ -140,7 +153,6 @@ public class TrayIcon : IDisposable
         if (!_isRecording) return;
         _isRecording = false;
 
-        // Hide overlay immediately so the user sees feedback right away.
         _overlay?.Close();
         _overlay = null;
 
@@ -177,12 +189,10 @@ public class TrayIcon : IDisposable
         _settings.Save();
         _recorder.UpdateSettings(_settings);
 
-        // Update check marks using the Tag stored on each menu item.
         foreach (ToolStripMenuItem item in _modelMenu.DropDownItems)
             item.Checked = (string?)item.Tag == modelName;
 
-        _notifyIcon.ShowBalloonTip(2500, "Model Updated",
-            $"Now using: {ModelLabel(modelName)}", ToolTipIcon.Info);
+        ShowNotificationPill($"Model → {modelName}", PillAmber, durationMs: 2500);
     }
 
     private void SetHotkeyMode(HotkeyMode mode)
@@ -190,17 +200,13 @@ public class TrayIcon : IDisposable
         _settings.HotkeyMode = mode;
         _settings.Save();
 
-        // Update check marks using the Tag stored on each menu item.
         foreach (ToolStripMenuItem item in _hotkeyModeMenu.DropDownItems)
             item.Checked = item.Tag is HotkeyMode tagMode && tagMode == mode;
 
         RegisterHotkey();
 
-        _notifyIcon.ShowBalloonTip(2500, "Hotkey Mode Updated",
-            mode == HotkeyMode.Toggle
-                ? "Press F9 once to start/stop"
-                : "Hold F9 to record, release to stop",
-            ToolTipIcon.Info);
+        var label = mode == HotkeyMode.Toggle ? "Toggle" : "Push-to-talk";
+        ShowNotificationPill($"Hotkey: {label} ✓", PillAmber, durationMs: 2500);
     }
 
     private void OnSetOutputFolder(object? sender, EventArgs e)
@@ -218,8 +224,7 @@ public class TrayIcon : IDisposable
             _settings.Save();
             _recorder.UpdateSettings(_settings);
 
-            _notifyIcon.ShowBalloonTip(2500, "Output Folder Updated",
-                dialog.SelectedPath, ToolTipIcon.Info);
+            ShowNotificationPill("Output folder updated ✓", PillAmber, durationMs: 2500);
         }
     }
 
@@ -236,9 +241,8 @@ public class TrayIcon : IDisposable
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            SetState(); // back to idle
-            _notifyIcon.ShowBalloonTip(4000, "Transcription Complete ✅",
-                $"Saved to:\n{outputPath}", ToolTipIcon.Info);
+            SetState();
+            ShowNotificationPill("Transcription saved ✅", PillGreen, durationMs: 4000);
         });
     }
 
@@ -247,9 +251,62 @@ public class TrayIcon : IDisposable
         Application.Current.Dispatcher.Invoke(() =>
         {
             SetState();
-            _notifyIcon.ShowBalloonTip(4000, "Transcription Failed ❌",
-                error, ToolTipIcon.Error);
+            ShowNotificationPill($"Failed: {error}", PillRed, durationMs: 4000);
         });
+    }
+
+    private void OnModelDownloadStarted(string modelName)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            _notifyIcon.Icon = CreateIcon(TranscribingColor);
+            _notifyIcon.Text = $"Voxto – Downloading {modelName} model…";
+
+            _overlay?.Close();
+            _overlay = new OverlayWindow($"Downloading {modelName} model…", PillAmber);
+            _overlay.Show();
+        });
+    }
+
+    private void OnModelDownloadFinished()
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            _overlay?.Close();
+            _overlay = null;
+            SetState(transcribing: true);
+        });
+    }
+
+    // ── Pill notifications ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Shows the overlay pill with <paramref name="message"/> and auto-dismisses it after
+    /// <paramref name="durationMs"/> milliseconds. Safe to call while recording — the call
+    /// is ignored so the recording pill is never interrupted.
+    /// </summary>
+    private void ShowNotificationPill(string message, WpfColor dotColor, int durationMs = 3000)
+    {
+        // Don't disturb the persistent recording or download pill.
+        if (_isRecording || _overlay != null) return;
+
+        // Cancel any previous auto-dismiss that is still pending.
+        DismissNotificationPill();
+
+        _overlay = new OverlayWindow(message, dotColor);
+        _overlay.Show();
+
+        _notificationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(durationMs) };
+        _notificationTimer.Tick += (_, _) => DismissNotificationPill();
+        _notificationTimer.Start();
+    }
+
+    private void DismissNotificationPill()
+    {
+        _notificationTimer?.Stop();
+        _notificationTimer = null;
+        _overlay?.Close();
+        _overlay = null;
     }
 
     // ── UI state ─────────────────────────────────────────────────────────────
@@ -291,6 +348,7 @@ public class TrayIcon : IDisposable
 
     private void OnExit(object? sender, EventArgs e)
     {
+        _notificationTimer?.Stop();
         _hotkey?.Dispose();
         _recorder.Dispose();
         _overlay?.Close();
@@ -301,6 +359,7 @@ public class TrayIcon : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        _notificationTimer?.Stop();
         _hotkey?.Dispose();
         _overlay?.Close();
         _notifyIcon.Dispose();
