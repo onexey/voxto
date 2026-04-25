@@ -79,6 +79,25 @@ jobs:
             -p:FileVersion="${{ needs.version.outputs.version }}" `
             --output publish/${{ matrix.rid }}
 
+      # Whisper.net.Runtime places its native DLLs under runtimes/<rid>/native/
+      # inside the publish output. Flatten them to the root so the runtime
+      # loader finds them next to voxto.exe without any extra search paths.
+      - name: Flatten native libraries
+        shell: pwsh
+        run: |
+          $out    = "publish\${{ matrix.rid }}"
+          $native = "$out\runtimes\${{ matrix.rid }}\native"
+          if (Test-Path $native) {
+            Get-ChildItem $native -File | ForEach-Object {
+              Copy-Item $_.FullName -Destination $out -Force
+              Write-Output "Flattened: $($_.Name)"
+            }
+          } else {
+            Write-Output "No runtimes subdirectory — native libs already at root"
+          }
+          Write-Output "`nPublish output:"
+          Get-ChildItem $out | Select-Object Name, Length | Format-Table -AutoSize
+
       # ── Code signing ────────────────────────────────────────────────────
       - name: Sign executable
         if: env.CERT != ''

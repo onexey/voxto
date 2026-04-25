@@ -139,4 +139,58 @@ public class AppSettingsTests : IDisposable
         var settings = AppSettings.Load(TempFile);
         Assert.Equal("Small", settings.ModelType);
     }
+
+    // ── EnabledOutputs ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void NewInstance_DefaultEnabledOutputs_ContainsMarkdownFile()
+    {
+        var settings = new AppSettings();
+        Assert.Contains("MarkdownFile", settings.EnabledOutputs);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesEnabledOutputs()
+    {
+        var original = new AppSettings
+        {
+            EnabledOutputs = ["MarkdownFile", "TodoAppend"]
+        };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.Equal(2, loaded.EnabledOutputs.Count);
+        Assert.Contains("MarkdownFile", loaded.EnabledOutputs);
+        Assert.Contains("TodoAppend",   loaded.EnabledOutputs);
+    }
+
+    [Fact]
+    public void SaveThenLoad_EmptyEnabledOutputs_RoundTripsCorrectly()
+    {
+        var original = new AppSettings { EnabledOutputs = [] };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.Empty(loaded.EnabledOutputs);
+    }
+
+    // ── TodoFilePath ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void NewInstance_DefaultTodoFilePath_EndsWithTodoMd()
+    {
+        var settings = new AppSettings();
+        Assert.EndsWith("todo.md", settings.TodoFilePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesTodFilePath()
+    {
+        var path     = @"C:\Users\Test\notes\todo.md";
+        var original = new AppSettings { TodoFilePath = path };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.Equal(path, loaded.TodoFilePath);
+    }
 }

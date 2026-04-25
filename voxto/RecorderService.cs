@@ -1,5 +1,6 @@
 using System.IO;
 using NAudio.Wave;
+using Serilog;
 using Whisper.net;
 using Whisper.net.Ggml;
 
@@ -72,6 +73,8 @@ public class RecorderService : IDisposable
             _waveWriter?.Write(e.Buffer, 0, e.BytesRecorded);
 
         _waveIn.StartRecording();
+
+        Log.Information("Recording started (model={Model})", _settings.ModelType);
         return Task.CompletedTask;
     }
 
@@ -92,8 +95,11 @@ public class RecorderService : IDisposable
         _waveWriter?.Dispose();
         _waveWriter = null;
 
+        Log.Information("Recording stopped — starting transcription");
+
         if (_tempWavPath == null || !File.Exists(_tempWavPath))
         {
+            Log.Warning("Transcription skipped: no audio was captured");
             TranscriptionFailed?.Invoke("No audio was captured.");
             return;
         }
@@ -106,10 +112,12 @@ public class RecorderService : IDisposable
         catch (AggregateException aex)
         {
             var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
+            Log.Error(aex, "Transcription output(s) failed: {Message}", msg);
             TranscriptionFailed?.Invoke(msg);
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Transcription failed: {Message}", ex.Message);
             TranscriptionFailed?.Invoke(ex.Message);
         }
         finally
@@ -136,6 +144,8 @@ public class RecorderService : IDisposable
         using var fileStream = File.OpenRead(wavPath);
         await foreach (var seg in processor.ProcessAsync(fileStream))
             segments.Add((seg.Start, seg.End, seg.Text.Trim()));
+
+        Log.Information("Transcription complete ({Segments} segments)", segments.Count);
 
         var result = new TranscriptionResult
         {
@@ -167,15 +177,18 @@ public class RecorderService : IDisposable
 
         if (!File.Exists(modelPath))
         {
+            Log.Information("Model file not found — downloading {Model}", _settings.ModelType);
             ModelDownloadStarted?.Invoke(_settings.ModelType);
             try
             {
                 using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(ggmlType);
                 using var fileStream  = File.OpenWrite(modelPath);
                 await modelStream.CopyToAsync(fileStream);
+                Log.Information("Model downloaded successfully: {Model}", _settings.ModelType);
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "Model download failed for {Model}", _settings.ModelType);
                 // Remove partial file so the next run retries the download.
                 if (File.Exists(modelPath)) File.Delete(modelPath);
                 throw;

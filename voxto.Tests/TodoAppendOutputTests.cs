@@ -1,0 +1,116 @@
+using System.IO;
+using Voxto;
+
+namespace Voxto.Tests;
+
+public class TodoAppendOutputTests : IDisposable
+{
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+    private string TodoFile => Path.Combine(_tempDir, "todo.md");
+
+    private readonly TodoAppendOutput _output = new();
+
+    public TodoAppendOutputTests() => Directory.CreateDirectory(_tempDir);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+            Directory.Delete(_tempDir, recursive: true);
+    }
+
+    private AppSettings Settings() => new() { TodoFilePath = TodoFile };
+
+    private static TranscriptionResult Result(string text, DateTime? timestamp = null) =>
+        new()
+        {
+            Timestamp = timestamp ?? new DateTime(2026, 4, 25, 17, 32, 0),
+            Segments  = [(TimeSpan.Zero, TimeSpan.FromSeconds(3), text)]
+        };
+
+    // ── Format ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task WriteAsync_ProducesCorrectLineFormat()
+    {
+        await _output.WriteAsync(Result("Buy milk"), Settings());
+
+        var line = (await File.ReadAllTextAsync(TodoFile)).TrimEnd();
+        Assert.Equal("[ ] Buy milk @25.04.2026 17:32", line);
+    }
+
+    [Fact]
+    public async Task WriteAsync_LineStartsWithCheckboxSyntax()
+    {
+        await _output.WriteAsync(Result("Some task"), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.StartsWith("[ ]", content);
+    }
+
+    [Fact]
+    public async Task WriteAsync_DateUsesExpectedFormat()
+    {
+        var ts = new DateTime(2026, 12, 1, 9, 5, 0);
+        await _output.WriteAsync(Result("Task", ts), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.Contains("@01.12.2026 09:05", content);
+    }
+
+    // ── Append behaviour ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task WriteAsync_CalledTwice_AppendsBothLines()
+    {
+        var settings = Settings();
+        await _output.WriteAsync(Result("First task"),  settings);
+        await _output.WriteAsync(Result("Second task"), settings);
+
+        var lines = (await File.ReadAllTextAsync(TodoFile))
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(2, lines.Length);
+        Assert.Contains("First task",  lines[0]);
+        Assert.Contains("Second task", lines[1]);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ExistingContent_IsNotOverwritten()
+    {
+        await File.WriteAllTextAsync(TodoFile, $"[ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}");
+        await _output.WriteAsync(Result("New task"), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.Contains("Pre-existing task", content);
+        Assert.Contains("New task",          content);
+    }
+
+    // ── File / directory creation ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task WriteAsync_FileDoesNotExist_CreatesIt()
+    {
+        Assert.False(File.Exists(TodoFile));
+        await _output.WriteAsync(Result("Task"), Settings());
+        Assert.True(File.Exists(TodoFile));
+    }
+
+    [Fact]
+    public async Task WriteAsync_DirectoryDoesNotExist_CreatesIt()
+    {
+        var settings = new AppSettings
+        {
+            TodoFilePath = Path.Combine(_tempDir, "nested", "deep", "todo.md")
+        };
+        await _output.WriteAsync(Result("Task"), settings);
+        Assert.True(File.Exists(settings.TodoFilePath));
+    }
+
+    // ── ITranscriptionOutput contract ─────────────────────────────────────────
+
+    [Fact]
+    public void Id_IsTodoAppend()    => Assert.Equal("TodoAppend", _output.Id);
+
+    [Fact]
+    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+}

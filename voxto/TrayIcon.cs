@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Windows;
 using System.Windows.Threading;
+using Serilog;
 using Application  = System.Windows.Application;
 using WpfColor     = System.Windows.Media.Color;
 
@@ -161,6 +162,7 @@ public class TrayIcon : IDisposable
 
     private void OnTranscriptionFailed(string error)
     {
+        Log.Error("Transcription failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
             SetState();

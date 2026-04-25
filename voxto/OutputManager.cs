@@ -23,6 +23,15 @@ public sealed class OutputManager
         };
     }
 
+    /// <summary>
+    /// Constructor used by unit tests to inject arbitrary <see cref="ITranscriptionOutput"/>
+    /// implementations without touching the file system or real outputs.
+    /// </summary>
+    internal OutputManager(params ITranscriptionOutput[] outputs)
+    {
+        _all = outputs;
+    }
+
     /// <summary>All registered outputs, in the order they will be executed.</summary>
     public IReadOnlyList<ITranscriptionOutput> All => _all;
 
