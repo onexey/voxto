@@ -146,11 +146,26 @@
                                    LineHeight="20"
                                    Text="A lightweight Windows speech-to-text recorder powered by OpenAI Whisper. Press your hotkey, speak, and your words land wherever you need them."/>
 
+                        <Border Background="#F0FDF4"
+                                BorderBrush="#BBF7D0"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8"
+                                Margin="0,14,0,0"
+                                MaxWidth="340">
+                            <TextBlock TextWrapping="Wrap"
+                                       TextAlignment="Center"
+                                       Foreground="#166534"
+                                       FontSize="11"
+                                       LineHeight="18"
+                                       Text="🔒  Runs entirely on your machine using a local Whisper model. Your audio and transcriptions never leave your device."/>
+                        </Border>
+
                         <Separator Margin="0,20,0,16" Background="#DDD"/>
 
                         <TextBlock HorizontalAlignment="Center" FontSize="12">
                             <Hyperlink x:Name="RepoLink"
-                                       NavigateUri="https://github.com/"
+                                       NavigateUri="https://github.com/onexey/voxto"
                                        RequestNavigate="OnOpenRepo">
                                 View source on GitHub
                             </Hyperlink>
