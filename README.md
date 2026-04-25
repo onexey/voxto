@@ -1,3 +1,9 @@
+[![CI Gate](https://github.com/onexey/voxto/actions/workflows/ci.yml/badge.svg)](https://github.com/onexey/voxto/actions/workflows/ci.yml)
+[![Publish](https://github.com/onexey/voxto/actions/workflows/publish.yml/badge.svg)](https://github.com/onexey/voxto/actions/workflows/publish.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+<a href="https://www.buymeacoffee.com/onexey" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="30"></a>
+
 # Voxto
 
 A minimal Windows tray app that records audio, transcribes it with Whisper.net, and saves the result as a Markdown file.
