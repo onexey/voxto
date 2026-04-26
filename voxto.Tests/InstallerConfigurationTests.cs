@@ -18,4 +18,13 @@ public class InstallerConfigurationTests
         Assert.Contains("Version=\"$(var.Version)\"", packageWxs, StringComparison.Ordinal);
         Assert.DoesNotContain("Version=\"$(Version)\"", packageWxs, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void InstallerProject_DefinesWixVersionConstantFromMsBuildVersion()
+    {
+        var projectPath      = Path.Combine(RepositoryRoot, "installer", "installer.wixproj");
+        var installerProject = File.ReadAllText(projectPath);
+
+        Assert.Contains("<DefineConstants>$(DefineConstants);Version=$(Version)</DefineConstants>", installerProject, StringComparison.Ordinal);
+    }
 }
