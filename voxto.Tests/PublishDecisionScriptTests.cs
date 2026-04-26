@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics;
 using System.IO;
 using Xunit;
+using Xunit.Sdk;
 
 namespace Voxto.Tests;
 
@@ -76,7 +78,7 @@ public sealed class PublishDecisionScriptTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "pwsh",
+                FileName = GetPowerShellExecutableOrSkip(),
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
@@ -96,5 +98,54 @@ public sealed class PublishDecisionScriptTests : IDisposable
 
         Assert.True(process.ExitCode == 0, $"Script failed with exit code {process.ExitCode}:{Environment.NewLine}{standardError}");
         return standardOutput;
+    }
+
+    private static string GetPowerShellExecutableOrSkip()
+    {
+        foreach (var candidate in new[] { "pwsh", "powershell" })
+        {
+            if (IsExecutableAvailable(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw SkipException.ForSkip("PowerShell was not found on PATH.");
+    }
+
+    private static bool IsExecutableAvailable(string executableName)
+    {
+        var pathValue = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathValue))
+        {
+            return false;
+        }
+
+        var extensions = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var directPath = Path.Combine(directory, executableName);
+            if (File.Exists(directPath))
+            {
+                return true;
+            }
+
+            if (Path.HasExtension(executableName))
+            {
+                continue;
+            }
+
+            foreach (var extension in extensions)
+            {
+                if (File.Exists(directPath + extension))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

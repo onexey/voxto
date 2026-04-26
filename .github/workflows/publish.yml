@@ -52,7 +52,7 @@ jobs:
             Tee-Object -FilePath publish-decision.txt
 
           Get-Content publish-decision.txt | ForEach-Object {
-            "$_" >> $env:GITHUB_OUTPUT
+            Add-Content -Path $env:GITHUB_OUTPUT -Value $_ -Encoding utf8
           }
 
       - name: Publish decision
