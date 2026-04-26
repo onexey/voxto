@@ -30,7 +30,7 @@ public class TrayIcon : IDisposable
 
     private ToolStripMenuItem _recordItem = null!;
     private ToolStripMenuItem _prefsItem  = null!;
-    private ToolStripMenuItem _updateItem = null!; // hidden until an update is ready
+    private ToolStripMenuItem _updateItem = null!; // update menu item; visibility is managed when the menu is built/updated
 
     // ── Tray icon colours (GDI) ───────────────────────────────────────────────
     private static readonly Color IdleColor         = Color.FromArgb(34,  197, 94);  // green
