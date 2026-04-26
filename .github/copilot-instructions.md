@@ -15,7 +15,9 @@ Voxto is a Windows-only system-tray app that records microphone audio, transcrib
 | Transcription | Whisper.net + Whisper.net.Runtime (native DLLs) |
 | Logging | Serilog → daily rolling file in `%LocalAppData%\Voxto\logs\` |
 | Tests | xUnit (project `voxto.Tests`) |
-| CI/CD | GitHub Actions — CI Gate (tests) + Publish (CalVer, win-x64 & win-arm64) |
+| CI/CD | GitHub Actions — CI Gate (tests) + Publish (CalVer, win-x64 & win-arm64 ZIP + MSI) |
+| Installer | WiX Toolset v5 MSI (`installer/`) — per-user, no UAC, auto-upgrades via MajorUpgrade |
+| Auto-update | `UpdateService` — GitHub Releases API, SHA-256 verified download, PowerShell trampoline |
 
 ---
 
@@ -37,21 +39,28 @@ voxto/
 │   ├── GlobalHotkey.cs       # Win32 hotkey + low-level keyboard hook
 │   ├── OverlayWindow.xaml/.cs # always-on-top pill notification
 │   ├── PreferencesWindow.xaml/.cs # full settings UI (two tabs: General + About)
-│   └── StartupManager.cs     # HKCU run-at-startup registry helper
+│   ├── StartupManager.cs     # HKCU run-at-startup registry helper
+│   └── UpdateService.cs      # GitHub Releases update checker + downloader + installer
+├── installer/                # WiX v5 MSI installer project
+│   ├── installer.wixproj     # WiX MSBuild project — HarvestDirectory, version wiring
+│   └── Package.wxs           # Package definition — per-user install, shortcuts, MajorUpgrade
 ├── voxto.Tests/              # xUnit test project
 │   ├── AppSettingsTests.cs
 │   ├── MarkdownFormatterTests.cs
 │   ├── TranscriptionResultTests.cs
 │   ├── TodoAppendOutputTests.cs
 │   ├── MarkdownFileOutputTests.cs
-│   └── OutputManagerTests.cs
+│   ├── OutputManagerTests.cs
+│   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
+│   ├── auto-update.md        # auto-update flow, security model, preferences
+│   └── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
 │   ├── dependabot.yml
 │   └── workflows/
 │       ├── ci.yml            # CI Gate — runs all tests on PRs/push to main
-│       └── publish.yml       # CalVer build + sign + GitHub Release on CI Gate pass
+│       └── publish.yml       # CalVer build + sign + MSI + SHA-256 + GitHub Release
 └── README.md                 # quick-start only (see Documentation rules below)
 ```
 

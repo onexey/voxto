@@ -41,6 +41,7 @@ public partial class App : Application
             System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
 
         _trayIcon = new TrayIcon();
+        _trayIcon.StartUpdateService();
     }
 
     /// <inheritdoc/>

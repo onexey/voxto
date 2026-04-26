@@ -16,6 +16,18 @@ public enum HotkeyMode
 }
 
 /// <summary>
+/// How often Voxto should check for updates in the background.
+/// </summary>
+public enum UpdateCheckInterval
+{
+    /// <summary>Check once per day.</summary>
+    Daily,
+
+    /// <summary>Check once per week.</summary>
+    Weekly
+}
+
+/// <summary>
 /// Persisted user preferences for Voxto.
 /// Settings are stored as JSON in <c>%LocalAppData%\Voxto\settings.json</c>.
 /// </summary>
@@ -60,6 +72,26 @@ public class AppSettings
     /// </summary>
     public string TodoFilePath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto", "todo.md");
+
+    // ── Auto-update ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Whether Voxto should check for updates automatically in the background.
+    /// Defaults to <c>true</c>.
+    /// </summary>
+    public bool AutoUpdateEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How often the background update check should run.
+    /// Defaults to <see cref="UpdateCheckInterval.Weekly"/>.
+    /// </summary>
+    public UpdateCheckInterval UpdateCheckInterval { get; set; } = UpdateCheckInterval.Weekly;
+
+    /// <summary>
+    /// UTC timestamp of the last successful update check.
+    /// <c>null</c> means never checked.
+    /// </summary>
+    public DateTime? LastUpdateCheck { get; set; }
 
     /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.

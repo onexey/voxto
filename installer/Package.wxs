@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Voxto MSI Installer — WiX v5
+  ════════════════════════════════════════════════════════════════════════════
+
+  Design decisions
+  ────────────────
+  • Scope="perUser"  →  installs to %LocalAppData%\Programs\Voxto with NO
+    UAC prompt, making silent updates frictionless (msiexec /passive requires
+    no elevation for per-user packages).
+
+  • UpgradeCode is a fixed GUID that MUST NEVER CHANGE.  Changing it severs
+    the upgrade chain and leaves old versions as orphans in Add/Remove Programs.
+
+  • MajorUpgrade removes the previous version before installing the new one,
+    so stale files (removed DLLs, renamed binaries) are always cleaned up.
+
+  • Files are NOT listed here — they are harvested at build time from the
+    dotnet publish output by the HarvestDirectory item in installer.wixproj.
+    This guarantees that every Whisper native DLL lands in the installer
+    without manual maintenance.
+
+  • No launch-after-install custom action is included here.  Fresh installs
+    are launched by the user from the Start Menu shortcut.  Updates are
+    triggered through the app's UpdateService, which uses its own PowerShell
+    trampoline to relaunch the new executable after msiexec finishes.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Voxto"
+           Manufacturer="Mesut Soylu"
+           Version="$(Version)"
+           UpgradeCode="{7C9A5E2F-3B8D-4F1A-9E6C-2D5A8B0F3E7C}"
+           Scope="perUser"
+           Compressed="yes">
+
+    <!--
+      MajorUpgrade: automatically remove the previous version on upgrade.
+      "Downgrade" installs are blocked with a friendly error message.
+    -->
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of Voxto is already installed. Please uninstall it first if you want to downgrade." />
+
+    <!-- Embed all files in a single CAB for a self-contained MSI. -->
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!--
+      Install to %LocalAppData%\Programs\Voxto.
+      With Scope="perUser", ProgramFilesFolder maps to %LocalAppData%\Programs.
+    -->
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLDIR" Name="Voxto" />
+    </StandardDirectory>
+
+    <!--
+      Start Menu shortcut — the only entry point for fresh installs.
+      The RegistryValue KeyPath is required by Windows Installer; it records
+      that this component is installed for the current user.
+    -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="VoxtoMenuDir" Name="Voxto">
+        <Component Id="StartMenuShortcut"
+                   Guid="{A2B3C4D5-E6F7-8901-BCDE-F12345678901}">
+          <Shortcut Id="VoxtoShortcut"
+                    Name="Voxto"
+                    Target="[INSTALLDIR]voxto.exe"
+                    WorkingDirectory="INSTALLDIR"
+                    Description="Voxto — local speech-to-text recorder" />
+          <RemoveFolder Id="CleanMenuDir" Directory="VoxtoMenuDir" On="uninstall" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\Voxto\Install"
+                         Name="StartMenuShortcut"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!--
+      Feature block — everything that gets installed.
+      PublishComponents is generated at build time by HarvestDirectory.
+    -->
+    <Feature Id="Main" Title="Voxto" Level="1">
+      <ComponentGroupRef Id="PublishComponents" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+  </Package>
+</Wix>

@@ -17,14 +17,15 @@ namespace Voxto;
 public partial class PreferencesWindow : Window
 {
     private readonly OutputManager _outputManager;
+    private readonly UpdateService _updateService;
 
     // Maps output ID → its CheckBox so we can read/write checked state.
     private readonly Dictionary<string, CheckBox> _outputChecks = new();
 
     // Output Folder sub-row — built in code alongside the MarkdownFile checkbox.
-    private TextBox  _outputFolderBox    = null!;
-    private Button   _browseOutputFolder = null!;
-    private UIElement _outputFolderRow   = null!;
+    private TextBox   _outputFolderBox    = null!;
+    private Button    _browseOutputFolder = null!;
+    private UIElement _outputFolderRow    = null!;
 
     /// <summary>
     /// The settings produced when the user clicks Save.
@@ -33,9 +34,10 @@ public partial class PreferencesWindow : Window
     public AppSettings Result { get; private set; }
 
     /// <summary>Opens the preferences window pre-populated with <paramref name="current"/> settings.</summary>
-    public PreferencesWindow(AppSettings current, OutputManager outputManager)
+    public PreferencesWindow(AppSettings current, OutputManager outputManager, UpdateService updateService)
     {
         _outputManager = outputManager;
+        _updateService = updateService;
         Result         = current; // kept as fallback; replaced on Save
 
         InitializeComponent();
@@ -108,9 +110,26 @@ public partial class PreferencesWindow : Window
         // Startup
         StartupCheck.IsChecked = StartupManager.IsEnabled();
 
+        // Auto-update
+        AutoUpdateCheck.IsChecked = s.AutoUpdateEnabled;
+
+        foreach (ComboBoxItem item in UpdateIntervalCombo.Items)
+        {
+            if ((string)item.Tag == s.UpdateCheckInterval.ToString())
+            {
+                UpdateIntervalCombo.SelectedItem = item;
+                break;
+            }
+        }
+        if (UpdateIntervalCombo.SelectedItem is null)
+            UpdateIntervalCombo.SelectedIndex = 1; // default: Weekly
+
+        RefreshLastCheckedLabel(s);
+
         // Sync sub-row enabled states
         UpdateMarkdownFolderRowEnabled();
         UpdateTodoFileRowEnabled();
+        UpdateFrequencyRowEnabled();
     }
 
     /// <summary>Builds the Output Folder path row that sits beneath the MarkdownFile checkbox.</summary>
@@ -157,7 +176,7 @@ public partial class PreferencesWindow : Window
     private void UpdateMarkdownFolderRowEnabled()
     {
         var on = _outputChecks.TryGetValue("MarkdownFile", out var cb) && cb.IsChecked == true;
-        _outputFolderRow.IsEnabled    = on;
+        _outputFolderRow.IsEnabled = on;
     }
 
     private void UpdateTodoFileRowEnabled()
@@ -165,6 +184,25 @@ public partial class PreferencesWindow : Window
         var on = _outputChecks.TryGetValue("TodoAppend", out var cb) && cb.IsChecked == true;
         TodoFileBox.IsEnabled   = on;
         BrowseTodoBtn.IsEnabled = on;
+    }
+
+    private void UpdateFrequencyRowEnabled() =>
+        UpdateFrequencyRow.IsEnabled = AutoUpdateCheck.IsChecked == true;
+
+    private void RefreshLastCheckedLabel(AppSettings s)
+    {
+        if (s.LastUpdateCheck is null)
+        {
+            LastCheckedText.Text = "Never checked";
+            return;
+        }
+
+        var ago = DateTime.UtcNow - s.LastUpdateCheck.Value;
+        LastCheckedText.Text = ago.TotalMinutes < 2  ? "Checked just now"
+                             : ago.TotalHours   < 1  ? $"Checked {(int)ago.TotalMinutes} min ago"
+                             : ago.TotalDays    < 1  ? $"Checked {(int)ago.TotalHours} h ago"
+                             : ago.TotalDays    < 2  ? "Checked yesterday"
+                             : $"Checked {(int)ago.TotalDays} days ago";
     }
 
     private AppSettings BuildSettings()
@@ -187,6 +225,17 @@ public partial class PreferencesWindow : Window
 
         s.TodoFilePath = TodoFileBox.Text.Trim();
         s.OutputFolder = _outputFolderBox.Text.Trim();
+
+        s.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
+
+        if (UpdateIntervalCombo.SelectedItem is ComboBoxItem intervalItem)
+        {
+            s.UpdateCheckInterval = (string)intervalItem.Tag == "Daily"
+                ? UpdateCheckInterval.Daily
+                : UpdateCheckInterval.Weekly;
+        }
+
+        // Preserve the last-check timestamp — don't reset it on save.
 
         return s;
     }
@@ -220,6 +269,27 @@ public partial class PreferencesWindow : Window
 
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             _outputFolderBox.Text = dialog.SelectedPath;
+    }
+
+    // ── Update section handlers ───────────────────────────────────────────────
+
+    private void OnAutoUpdateChanged(object sender, RoutedEventArgs e) =>
+        UpdateFrequencyRowEnabled();
+
+    private async void OnCheckNow(object sender, RoutedEventArgs e)
+    {
+        CheckNowBtn.IsEnabled = false;
+        LastCheckedText.Text  = "Checking…";
+
+        try
+        {
+            await _updateService.CheckForUpdatesAsync();
+        }
+        finally
+        {
+            CheckNowBtn.IsEnabled = true;
+            RefreshLastCheckedLabel(AppSettings.Load());
+        }
     }
 
     // ── Button handlers ───────────────────────────────────────────────────────

@@ -11,14 +11,16 @@ namespace Voxto;
 
 /// <summary>
 /// Owns the system-tray <see cref="NotifyIcon"/>, the minimal tray context menu,
-/// the <see cref="GlobalHotkey"/> registration, and the recording overlay window.
+/// the <see cref="GlobalHotkey"/> registration, the recording overlay window, and
+/// the <see cref="UpdateService"/> that checks GitHub for newer releases.
 /// All user preferences are exposed through <see cref="PreferencesWindow"/>.
 /// </summary>
 public class TrayIcon : IDisposable
 {
-    private readonly NotifyIcon _notifyIcon;
+    private readonly NotifyIcon     _notifyIcon;
     private readonly RecorderService _recorder;
-    private readonly OutputManager _outputManager;
+    private readonly OutputManager   _outputManager;
+    private readonly UpdateService   _updateService;
     private AppSettings _settings;
     private GlobalHotkey? _hotkey;
     private OverlayWindow? _overlay;             // persistent: recording + model download
@@ -28,6 +30,7 @@ public class TrayIcon : IDisposable
 
     private ToolStripMenuItem _recordItem = null!;
     private ToolStripMenuItem _prefsItem  = null!;
+    private ToolStripMenuItem _updateItem = null!; // hidden until an update is ready
 
     // ── Tray icon colours (GDI) ───────────────────────────────────────────────
     private static readonly Color IdleColor         = Color.FromArgb(34,  197, 94);  // green
@@ -35,9 +38,10 @@ public class TrayIcon : IDisposable
     private static readonly Color TranscribingColor = Color.FromArgb(234, 179, 8);   // amber
 
     // ── Pill dot colours (WPF Media) ─────────────────────────────────────────
-    private static readonly WpfColor PillGreen = WpfColor.FromRgb(34,  197, 94);
-    private static readonly WpfColor PillRed   = WpfColor.FromRgb(220, 38,  38);
-    private static readonly WpfColor PillAmber = WpfColor.FromRgb(234, 179, 8);
+    private static readonly WpfColor PillGreen  = WpfColor.FromRgb(34,  197, 94);
+    private static readonly WpfColor PillRed    = WpfColor.FromRgb(220, 38,  38);
+    private static readonly WpfColor PillAmber  = WpfColor.FromRgb(234, 179, 8);
+    private static readonly WpfColor PillBlue   = WpfColor.FromRgb(59,  130, 246);
 
     /// <summary>Creates the tray icon, builds the context menu, and registers the hotkey.</summary>
     public TrayIcon()
@@ -45,11 +49,16 @@ public class TrayIcon : IDisposable
         _settings      = AppSettings.Load();
         _outputManager = new OutputManager();
         _recorder      = new RecorderService(_settings, _outputManager);
+        _updateService = new UpdateService(_settings);
 
         _recorder.TranscriptionCompleted += OnTranscriptionCompleted;
         _recorder.TranscriptionFailed    += OnTranscriptionFailed;
         _recorder.ModelDownloadStarted   += OnModelDownloadStarted;
         _recorder.ModelDownloadFinished  += OnModelDownloadFinished;
+
+        _updateService.UpdateAvailable += OnUpdateAvailable;
+        _updateService.UpdateReady     += OnUpdateReady;
+        _updateService.UpdateFailed    += OnUpdateFailed;
 
         _notifyIcon = new NotifyIcon
         {
@@ -64,17 +73,26 @@ public class TrayIcon : IDisposable
         RegisterHotkey();
     }
 
+    /// <summary>Starts the background update-check loop. Called by App after startup.</summary>
+    public void StartUpdateService() => _updateService.Start();
+
     // ── Menu ─────────────────────────────────────────────────────────────────
 
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
 
-        _recordItem = new ToolStripMenuItem("▶  Start Recording", null, (_, _) => ToggleRecording());
-        _prefsItem  = new ToolStripMenuItem("⚙  Preferences",     null, OnPreferences);
+        _recordItem = new ToolStripMenuItem("▶  Start Recording",  null, (_, _) => ToggleRecording());
+        _prefsItem  = new ToolStripMenuItem("⚙  Preferences",      null, OnPreferences);
+        _updateItem = new ToolStripMenuItem("🔄  Check for Updates", null, OnCheckForUpdates)
+        {
+            Visible = true  // always visible; text changes to "Restart to Update" when ready
+        };
 
         menu.Items.Add(_recordItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_prefsItem);
+        menu.Items.Add(_updateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("✖  Exit", null, OnExit));
 
@@ -140,16 +158,83 @@ public class TrayIcon : IDisposable
 
     private void OnPreferences(object? sender, EventArgs e)
     {
-        var win = new PreferencesWindow(_settings, _outputManager);
+        var win = new PreferencesWindow(_settings, _outputManager, _updateService);
         if (win.ShowDialog() == true)
         {
             _settings = win.Result;
             _recorder.UpdateSettings(_settings);
+            _updateService.UpdateSettings(_settings);
             RegisterHotkey();
         }
     }
 
-    // ── Callbacks ─────────────────────────────────────────────────────────────
+    // ── Update menu handlers ──────────────────────────────────────────────────
+
+    private async void OnCheckForUpdates(object? sender, EventArgs e)
+    {
+        // If an update is already downloaded and ready, apply it immediately.
+        if (_updateService.PendingMsiPath is not null)
+        {
+            _updateService.ApplyUpdateAndRestart();
+            return;
+        }
+
+        // Otherwise kick off an on-demand check.
+        _updateItem.Enabled = false;
+        _updateItem.Text    = "🔄  Checking…";
+        try
+        {
+            await _updateService.CheckForUpdatesAsync();
+        }
+        finally
+        {
+            // Re-enable. Text will be updated by the event handlers if an update was found.
+            if (_updateItem.Text == "🔄  Checking…")
+            {
+                _updateItem.Enabled = true;
+                _updateItem.Text    = "🔄  Check for Updates";
+            }
+        }
+    }
+
+    // ── Update service callbacks ──────────────────────────────────────────────
+
+    private void OnUpdateAvailable(string version)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Log.Information("Update available: {Version}", version);
+            _updateItem.Text    = $"⬇  Downloading v{version}…";
+            _updateItem.Enabled = false;
+            ShowNotificationPill($"Update v{version} downloading…", PillBlue, durationMs: 5000);
+        });
+    }
+
+    private void OnUpdateReady()
+    {
+        var version = _updateService.PendingVersion ?? "new version";
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Log.Information("Update ready to install: {Version}", version);
+            _updateItem.Text    = $"↺  Restart to Update v{version}";
+            _updateItem.Enabled = true;
+            // Persistent pill — dismissed only when user acts or restarts.
+            ShowNotificationPill($"Update v{version} ready — click tray to install", PillBlue, durationMs: 8000);
+        });
+    }
+
+    private void OnUpdateFailed(string error)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Log.Warning("Update failed: {Error}", error);
+            _updateItem.Enabled = true;
+            _updateItem.Text    = "🔄  Check for Updates";
+            ShowNotificationPill($"Update failed: {error}", PillAmber, durationMs: 5000);
+        });
+    }
+
+    // ── Transcription callbacks ───────────────────────────────────────────────
 
     private void OnTranscriptionCompleted()
     {
@@ -200,6 +285,7 @@ public class TrayIcon : IDisposable
         _notificationTimer?.Stop();
         _hotkey?.Dispose();
         _recorder.Dispose();
+        _updateService.Dispose();
         _overlay?.Close();
         _notificationOverlay?.Close();
         _notifyIcon.Visible = false;
@@ -284,5 +370,6 @@ public class TrayIcon : IDisposable
         _notificationOverlay?.Close();
         _notifyIcon.Dispose();
         _recorder.Dispose();
+        _updateService.Dispose();
     }
 }
