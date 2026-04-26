@@ -50,7 +50,7 @@
       which would otherwise require elevation during install and update.
     -->
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="ProgramsFolder" Name="Programs">
+      <Directory Id="LocalAppDataProgramsFolder" Name="Programs">
         <Directory Id="INSTALLDIR" Name="Voxto">
           <Component Id="InstallDirCleanup"
                      Guid="{9A1D5A2B-3D88-4F7D-99F5-A96F244D6D9B}">
