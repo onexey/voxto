@@ -9,7 +9,7 @@
     <OutputName>voxto-dev</OutputName>
     <OutputPath>bin\</OutputPath>
     <IntermediateOutputPath>obj\</IntermediateOutputPath>
-    <DefineConstants>$(DefineConstants);Version=$(Version)</DefineConstants>
+    <DefineConstants>$(DefineConstants);Version=$(Version);PublishDir=$(PublishDir)</DefineConstants>
 
     <!--
       PublishDir must point to the dotnet publish output for the target RID.
@@ -21,20 +21,6 @@
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext"   Version="5.0.2" />
     <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
-  </ItemGroup>
-
-  <!--
-    HarvestDirectory automatically discovers every file under PublishDir and
-    generates a ComponentGroup named PublishComponents, rooted at INSTALLDIR.
-    This means new native DLLs added by NuGet upgrades are picked up without
-    any changes to Package.wxs.
-  -->
-  <ItemGroup>
-    <HarvestDirectory Include="$(PublishDir)">
-      <ComponentGroupName>PublishComponents</ComponentGroupName>
-      <DirectoryRefId>INSTALLDIR</DirectoryRefId>
-      <SuppressRootDirectory>true</SuppressRootDirectory>
-    </HarvestDirectory>
   </ItemGroup>
 
 </Project>

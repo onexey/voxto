@@ -25,6 +25,26 @@ public class InstallerConfigurationTests
         var projectPath      = Path.Combine(RepositoryRoot, "installer", "installer.wixproj");
         var installerProject = File.ReadAllText(projectPath);
 
-        Assert.Contains("<DefineConstants>$(DefineConstants);Version=$(Version)</DefineConstants>", installerProject, StringComparison.Ordinal);
+        Assert.Contains("Version=$(Version)", installerProject, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InstallerProject_DefinesPublishDirectoryForWixAuthoring()
+    {
+        var projectPath      = Path.Combine(RepositoryRoot, "installer", "installer.wixproj");
+        var installerProject = File.ReadAllText(projectPath);
+
+        Assert.Contains("PublishDir=$(PublishDir)", installerProject, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackageWxs_HarvestsPublishedFilesFromConfiguredDirectory()
+    {
+        var packagePath = Path.Combine(RepositoryRoot, "installer", "Package.wxs");
+        var packageWxs  = File.ReadAllText(packagePath);
+
+        Assert.Contains("ComponentGroup Id=\"PublishComponents\"", packageWxs, StringComparison.Ordinal);
+        Assert.Contains("Source=\"$(var.PublishDir)\"", packageWxs, StringComparison.Ordinal);
+        Assert.Contains("<Files Include=\"**\" />", packageWxs, StringComparison.Ordinal);
     }
 }

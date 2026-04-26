@@ -42,8 +42,8 @@ voxto/
 │   ├── StartupManager.cs     # HKCU run-at-startup registry helper
 │   └── UpdateService.cs      # GitHub Releases update checker + downloader + installer
 ├── installer/                # WiX v5 MSI installer project
-│   ├── installer.wixproj     # WiX MSBuild project — HarvestDirectory, version wiring
-│   └── Package.wxs           # Package definition — per-user install, shortcuts, MajorUpgrade
+│   ├── installer.wixproj     # WiX MSBuild project — version and publish-dir wiring
+│   └── Package.wxs           # Package definition — per-user install, shortcuts, MajorUpgrade, publish-file harvesting
 ├── voxto.Tests/              # xUnit test project
 │   ├── AppSettingsTests.cs
 │   ├── MarkdownFormatterTests.cs

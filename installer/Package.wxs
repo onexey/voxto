@@ -15,8 +15,8 @@
   • MajorUpgrade removes the previous version before installing the new one,
     so stale files (removed DLLs, renamed binaries) are always cleaned up.
 
-  • Files are NOT listed here — they are harvested at build time from the
-    dotnet publish output by the HarvestDirectory item in installer.wixproj.
+  • Files are NOT listed one-by-one here — WiX harvests everything under the
+    publish directory through a Files include rooted at $(var.PublishDir).
     This guarantees that every Whisper native DLL lands in the installer
     without manual maintenance.
 
@@ -78,8 +78,17 @@
     </StandardDirectory>
 
     <!--
+      PublishComponents: harvest every file under the dotnet publish output
+      directory and install it into INSTALLDIR.
+    -->
+    <ComponentGroup Id="PublishComponents"
+                    Directory="INSTALLDIR"
+                    Source="$(var.PublishDir)">
+      <Files Include="**" />
+    </ComponentGroup>
+
+    <!--
       Feature block — everything that gets installed.
-      PublishComponents is generated at build time by HarvestDirectory.
     -->
     <Feature Id="Main" Title="Voxto" Level="1">
       <ComponentGroupRef Id="PublishComponents" />
