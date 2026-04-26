@@ -16,6 +16,14 @@
       Set by the workflow: -p:PublishDir="…\publish\win-x64\"
     -->
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)\..\publish\win-x64\</PublishDir>
+
+    <!--
+      ICE38 requires HKCU registry key paths for components installed under the
+      user profile. WiX v5's auto-generated components for <Files Include="**\*"/>
+      use file key paths, so per-user publish harvesting trips ICE38 even though
+      the install/update/uninstall flow itself is valid for this app.
+    -->
+    <SuppressIces>ICE38</SuppressIces>
   </PropertyGroup>
 
   <ItemGroup>

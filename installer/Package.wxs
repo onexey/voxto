@@ -46,11 +46,24 @@
 
     <!--
       Install to %LocalAppData%\Programs\Voxto.
-      With Scope="perUser", ProgramFiles64Folder maps to that per-user Programs
-      directory while still satisfying ICE validation for 64-bit payloads.
+      Using LocalAppDataFolder avoids the machine-wide Program Files location,
+      which would otherwise require elevation during install and update.
     -->
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLDIR" Name="Voxto" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLDIR" Name="Voxto">
+          <Component Id="InstallDirCleanup"
+                     Guid="{9A1D5A2B-3D88-4F7D-99F5-A96F244D6D9B}">
+            <RemoveFolder Id="CleanInstallDir" On="uninstall" />
+            <RegistryValue Root="HKCU"
+                           Key="Software\Voxto\Install"
+                           Name="InstallDirCleanup"
+                           Type="integer"
+                           Value="1"
+                           KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
     </StandardDirectory>
 
     <!--
@@ -93,6 +106,7 @@
     -->
     <Feature Id="Main" Title="Voxto" Level="1">
       <ComponentGroupRef Id="PublishComponents" />
+      <ComponentRef Id="InstallDirCleanup" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 

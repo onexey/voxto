@@ -70,6 +70,15 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
+    public void InstallerProject_SuppressesIce38ForPerUserHarvestedFiles()
+    {
+        var installerProject = LoadXmlDocument("installer", "installer.wixproj");
+        var suppressIces = installerProject.Descendants("SuppressIces").Single().Value;
+
+        Assert.Contains("ICE38", suppressIces, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PackageWxs_HarvestsPublishedFilesFromConfiguredDirectory()
     {
         var publishComponents = LoadXmlDocument("installer", "Package.wxs")
@@ -83,13 +92,50 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
-    public void PackageWxs_UsesProgramFiles64FolderForPerUserInstall()
+    public void PackageWxs_UsesLocalAppDataProgramsFolderForPerUserInstall()
     {
-        var installRoot = LoadXmlDocument("installer", "Package.wxs")
+        var package = LoadXmlDocument("installer", "Package.wxs");
+        var localAppDataFolder = package
             .Descendants(WixNamespace + "StandardDirectory")
-            .Single(element => string.Equals(element.Attribute("Id")?.Value, "ProgramFiles64Folder", StringComparison.Ordinal));
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "LocalAppDataFolder", StringComparison.Ordinal));
 
-        Assert.NotNull(installRoot.Element(WixNamespace + "Directory"));
+        var programsFolder = localAppDataFolder
+            .Elements(WixNamespace + "Directory")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "ProgramsFolder", StringComparison.Ordinal));
+
+        var installDirectory = programsFolder
+            .Elements(WixNamespace + "Directory")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "INSTALLDIR", StringComparison.Ordinal));
+
+        Assert.Equal("Programs", programsFolder.Attribute("Name")?.Value);
+        Assert.Equal("Voxto", installDirectory.Attribute("Name")?.Value);
+    }
+
+    [Fact]
+    public void PackageWxs_DoesNotUseProgramFilesFolderForPerUserInstall()
+    {
+        var standardDirectoryIds = LoadXmlDocument("installer", "Package.wxs")
+            .Descendants(WixNamespace + "StandardDirectory")
+            .Select(element => element.Attribute("Id")?.Value)
+            .Where(value => value is not null)
+            .ToArray();
+
+        Assert.DoesNotContain("ProgramFiles64Folder", standardDirectoryIds, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void PackageWxs_RemovesInstallDirectoryOnUninstall()
+    {
+        var cleanupComponent = LoadXmlDocument("installer", "Package.wxs")
+            .Descendants(WixNamespace + "Component")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "InstallDirCleanup", StringComparison.Ordinal));
+
+        var removeFolder = cleanupComponent.Element(WixNamespace + "RemoveFolder");
+        var registryValue = cleanupComponent.Element(WixNamespace + "RegistryValue");
+
+        Assert.Equal("uninstall", removeFolder?.Attribute("On")?.Value);
+        Assert.Equal("HKCU", registryValue?.Attribute("Root")?.Value);
+        Assert.Equal("yes", registryValue?.Attribute("KeyPath")?.Value);
     }
 
     [Fact]
