@@ -85,7 +85,7 @@
     <ComponentGroup Id="PublishComponents"
                     Directory="INSTALLDIR"
                     Source="$(var.PublishDir)">
-      <Files Include="**" />
+      <Files Include="**\*" />
     </ComponentGroup>
 
     <!--
