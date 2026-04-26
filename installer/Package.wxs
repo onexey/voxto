@@ -29,7 +29,7 @@
 
   <Package Name="Voxto"
            Manufacturer="Mesut Soylu"
-           Version="$(Version)"
+           Version="$(var.Version)"
            UpgradeCode="{7C9A5E2F-3B8D-4F1A-9E6C-2D5A8B0F3E7C}"
            Scope="perUser"
            Compressed="yes">
