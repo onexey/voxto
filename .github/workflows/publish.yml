@@ -36,6 +36,11 @@ jobs:
 
   # ── 2. Build, sign, and package for each Windows target ───────────────────
   #
+  # Produces per-architecture artifacts:
+  #   • voxto-{version}-{rid}.zip         — portable / no-install
+  #   • voxto-{version}-{rid}.msi         — MSI installer (per-user, no UAC)
+  #   • voxto-{version}-{rid}.msi.sha256  — SHA-256 sidecar for the auto-updater
+  #
   # Signing requires two repository secrets:
   #   SIGNING_CERT_BASE64  — PFX certificate encoded as base64
   #                          (openssl pkcs12 -export ... | base64 -w 0)
@@ -52,10 +57,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - rid:   win-x64
-            label: Windows x64
-          - rid:   win-arm64
-            label: Windows ARM64
+          - rid:         win-x64
+            label:       Windows x64
+            wixPlatform: x64
+          - rid:         win-arm64
+            label:       Windows ARM64
+            wixPlatform: arm64
 
     steps:
       - name: Checkout (pinned to the commit that passed CI)
@@ -68,6 +75,7 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # ── dotnet publish ───────────────────────────────────────────────────
       - name: Publish
         run: |
           dotnet publish voxto/voxto.csproj `
@@ -98,7 +106,7 @@ jobs:
           Write-Output "`nPublish output:"
           Get-ChildItem $out | Select-Object Name, Length | Format-Table -AutoSize
 
-      # ── Code signing ────────────────────────────────────────────────────
+      # ── Code signing (exe) ───────────────────────────────────────────────
       - name: Sign executable
         if: env.CERT != ''
         env:
@@ -131,21 +139,99 @@ jobs:
           # Remove PFX immediately — don't leave it in the workspace
           Remove-Item $pfxPath -Force
 
-      # ── Package ─────────────────────────────────────────────────────────
+      # ── MSI build ────────────────────────────────────────────────────────
+      #
+      # WixToolset.Sdk is pulled automatically by dotnet build from NuGet —
+      # no separate WiX installation step is needed.
+      # HarvestDirectory (in installer.wixproj) discovers every file in the
+      # publish output, so new native DLLs are picked up automatically.
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $version  = "${{ needs.version.outputs.version }}"
+          $rid      = "${{ matrix.rid }}"
+          $msiName  = "voxto-$version-$rid"
+          # Resolve-Path gives an absolute path; the trailing \ is required by WiX.
+          $pubDir   = (Resolve-Path "publish\$rid").Path + "\"
+
+          dotnet build installer/installer.wixproj `
+            -p:Version="$version" `
+            -p:PublishDir="$pubDir" `
+            -p:OutputName="$msiName" `
+            -p:OutputPath="$(Resolve-Path .)\" `
+            -p:Platform="${{ matrix.wixPlatform }}" `
+            --configuration Release `
+            --nologo
+
+          if (-not (Test-Path "$msiName.msi")) {
+            throw "MSI build failed — $msiName.msi was not produced"
+          }
+
+          $sizeMB = '{0:N1}' -f ((Get-Item "$msiName.msi").Length / 1MB)
+          Write-Output "Built $msiName.msi ($sizeMB MB)"
+
+      # ── Sign MSI ─────────────────────────────────────────────────────────
+      - name: Sign MSI
+        if: env.CERT != ''
+        env:
+          CERT:     ${{ secrets.SIGNING_CERT_BASE64 }}
+          CERT_PWD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT))
+
+          $signtool = Get-ChildItem `
+            "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "x64" } |
+            Sort-Object FullName |
+            Select-Object -Last 1 -ExpandProperty FullName
+
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          $msiFile = "voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.msi"
+          & $signtool sign `
+            /f  $pfxPath `
+            /p  $env:CERT_PWD `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            /fd sha256 `
+            /v  $msiFile
+
+          Remove-Item $pfxPath -Force
+
+      # ── SHA-256 sidecar ───────────────────────────────────────────────────
+      #
+      # The UpdateService downloads this file and verifies the MSI before
+      # running the installer.  Format: bare 64-char uppercase hex, no BOM,
+      # no newline — trivial to parse with a single string.Split(' ')[0].
+      - name: Generate SHA-256 sidecar
+        shell: pwsh
+        run: |
+          $msiFile  = "voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.msi"
+          $hashFile = "$msiFile.sha256"
+          $hash     = (Get-FileHash $msiFile -Algorithm SHA256).Hash
+          [IO.File]::WriteAllText($hashFile, $hash, [Text.Encoding]::ASCII)
+          Write-Output "SHA256($msiFile) = $hash"
+
+      # ── Portable ZIP (kept alongside MSI for users who prefer no-install) ─
       - name: Zip
         shell: pwsh
         run: |
           $zip = "voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip"
-          # Include the full directory so native Whisper DLLs are alongside the exe
           Compress-Archive -Path "publish\${{ matrix.rid }}\*" -DestinationPath $zip
           $size = '{0:N0}' -f (Get-Item $zip).Length
           Write-Output "Created $zip ($size bytes)"
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: voxto-${{ matrix.rid }}
-          path: voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip
+          path: |
+            voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.zip
+            voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.msi
+            voxto-${{ needs.version.outputs.version }}-${{ matrix.rid }}.msi.sha256
           if-no-files-found: error
 
   # ── 3. Create GitHub Release ───────────────────────────────────────────────
@@ -170,4 +256,7 @@ jobs:
           tag_name:               v${{ needs.version.outputs.version }}
           name:                   v${{ needs.version.outputs.version }}
           generate_release_notes: true
-          files:                  dist/*.zip
+          files: |
+            dist/*.zip
+            dist/*.msi
+            dist/*.sha256

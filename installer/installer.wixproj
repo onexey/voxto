@@ -1,0 +1,39 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <!--
+      OutputName is overridden by the publish workflow:
+        -p:OutputName="voxto-{version}-{rid}"
+      Default keeps local builds from failing.
+    -->
+    <OutputName>voxto-dev</OutputName>
+    <OutputPath>bin\</OutputPath>
+    <IntermediateOutputPath>obj\</IntermediateOutputPath>
+
+    <!--
+      PublishDir must point to the dotnet publish output for the target RID.
+      Set by the workflow: -p:PublishDir="…\publish\win-x64\"
+    -->
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)\..\publish\win-x64\</PublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext"   Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <!--
+    HarvestDirectory automatically discovers every file under PublishDir and
+    generates a ComponentGroup named PublishComponents, rooted at INSTALLDIR.
+    This means new native DLLs added by NuGet upgrades are picked up without
+    any changes to Package.wxs.
+  -->
+  <ItemGroup>
+    <HarvestDirectory Include="$(PublishDir)">
+      <ComponentGroupName>PublishComponents</ComponentGroupName>
+      <DirectoryRefId>INSTALLDIR</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+    </HarvestDirectory>
+  </ItemGroup>
+
+</Project>
