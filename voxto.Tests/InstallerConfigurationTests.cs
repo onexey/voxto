@@ -73,7 +73,10 @@ public class InstallerConfigurationTests
     public void InstallerProject_SuppressesIce38ForPerUserHarvestedFiles()
     {
         var installerProject = LoadXmlDocument("installer", "installer.wixproj");
-        var suppressIces = installerProject.Descendants("SuppressIces").Single().Value;
+        var suppressIces = installerProject
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "SuppressIces", StringComparison.Ordinal))
+            .Value;
 
         Assert.Contains("ICE38", suppressIces, StringComparison.Ordinal);
     }
@@ -101,7 +104,7 @@ public class InstallerConfigurationTests
 
         var programsFolder = localAppDataFolder
             .Elements(WixNamespace + "Directory")
-            .Single(element => string.Equals(element.Attribute("Id")?.Value, "ProgramsFolder", StringComparison.Ordinal));
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "LocalAppDataProgramsFolder", StringComparison.Ordinal));
 
         var installDirectory = programsFolder
             .Elements(WixNamespace + "Directory")
@@ -112,7 +115,7 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
-    public void PackageWxs_DoesNotUseProgramFilesFolderForPerUserInstall()
+    public void PackageWxs_DoesNotUseProgramFiles64FolderForPerUserInstall()
     {
         var standardDirectoryIds = LoadXmlDocument("installer", "Package.wxs")
             .Descendants(WixNamespace + "StandardDirectory")
