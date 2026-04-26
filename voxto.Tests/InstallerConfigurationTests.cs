@@ -1,60 +1,95 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Voxto.Tests;
 
 public class InstallerConfigurationTests
 {
-    private static string RepositoryRoot =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+    private static readonly XNamespace WixNamespace = "http://wixtoolset.org/schemas/v4/wxs";
+
+    private static string RepositoryRoot => FindRepositoryRoot();
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (current is not null)
+        {
+            var installerDirectory = Path.Combine(current.FullName, "installer");
+            var workflowPath = Path.Combine(current.FullName, ".github", "workflows", "publish.yml");
+
+            if (Directory.Exists(installerDirectory) && File.Exists(workflowPath))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Could not locate the repository root by walking upward from '{AppContext.BaseDirectory}'. " +
+            "Expected to find a directory containing both 'installer' and '.github/workflows/publish.yml'.");
+    }
+
+    private static XDocument LoadXmlDocument(params string[] relativePathSegments)
+    {
+        var path = Path.Combine(RepositoryRoot, Path.Combine(relativePathSegments));
+        return XDocument.Load(path);
+    }
 
     [Fact]
     public void PackageWxs_UsesMsBuildBackedWixVersionVariable()
     {
-        var packagePath = Path.Combine(RepositoryRoot, "installer", "Package.wxs");
-        var packageWxs  = File.ReadAllText(packagePath);
+        var package = LoadXmlDocument("installer", "Package.wxs")
+            .Descendants(WixNamespace + "Package")
+            .Single();
 
-        Assert.Contains("Version=\"$(var.MsiVersion)\"", packageWxs, StringComparison.Ordinal);
-        Assert.DoesNotContain("Version=\"$(Version)\"", packageWxs, StringComparison.Ordinal);
+        Assert.Equal("$(var.MsiVersion)", package.Attribute("Version")?.Value);
     }
 
     [Fact]
     public void InstallerProject_DefinesWixVersionConstantFromMsBuildVersion()
     {
-        var projectPath      = Path.Combine(RepositoryRoot, "installer", "installer.wixproj");
-        var installerProject = File.ReadAllText(projectPath);
+        var installerProject = LoadXmlDocument("installer", "installer.wixproj");
+        var defineConstants = installerProject.Descendants("DefineConstants").Single().Value;
 
-        Assert.Contains("MsiVersion=$(MsiVersion)", installerProject, StringComparison.Ordinal);
+        Assert.Contains("MsiVersion=$(MsiVersion)", defineConstants, StringComparison.Ordinal);
     }
 
     [Fact]
     public void InstallerProject_DefinesPublishDirectoryForWixAuthoring()
     {
-        var projectPath      = Path.Combine(RepositoryRoot, "installer", "installer.wixproj");
-        var installerProject = File.ReadAllText(projectPath);
+        var installerProject = LoadXmlDocument("installer", "installer.wixproj");
+        var defineConstants = installerProject.Descendants("DefineConstants").Single().Value;
 
-        Assert.Contains("PublishDir=$(PublishDir)", installerProject, StringComparison.Ordinal);
+        Assert.Contains("PublishDir=$(PublishDir)", defineConstants, StringComparison.Ordinal);
     }
 
     [Fact]
     public void PackageWxs_HarvestsPublishedFilesFromConfiguredDirectory()
     {
-        var packagePath = Path.Combine(RepositoryRoot, "installer", "Package.wxs");
-        var packageWxs  = File.ReadAllText(packagePath);
+        var publishComponents = LoadXmlDocument("installer", "Package.wxs")
+            .Descendants(WixNamespace + "ComponentGroup")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "PublishComponents", StringComparison.Ordinal));
 
-        Assert.Contains("ComponentGroup Id=\"PublishComponents\"", packageWxs, StringComparison.Ordinal);
-        Assert.Contains("Source=\"$(var.PublishDir)\"", packageWxs, StringComparison.Ordinal);
-        Assert.Contains("<Files Include=\"**\" />", packageWxs, StringComparison.Ordinal);
+        var files = publishComponents.Elements(WixNamespace + "Files").Single();
+
+        Assert.Equal("$(var.PublishDir)", publishComponents.Attribute("Source")?.Value);
+        Assert.Equal(@"**\*", files.Attribute("Include")?.Value);
     }
 
     [Fact]
     public void PackageWxs_UsesProgramFiles64FolderForPerUserInstall()
     {
-        var packagePath = Path.Combine(RepositoryRoot, "installer", "Package.wxs");
-        var packageWxs  = File.ReadAllText(packagePath);
+        var installRoot = LoadXmlDocument("installer", "Package.wxs")
+            .Descendants(WixNamespace + "StandardDirectory")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "ProgramFiles64Folder", StringComparison.Ordinal));
 
-        Assert.Contains("<StandardDirectory Id=\"ProgramFiles64Folder\">", packageWxs, StringComparison.Ordinal);
+        Assert.NotNull(installRoot.Element(WixNamespace + "Directory"));
     }
 
     [Fact]
@@ -63,8 +98,8 @@ public class InstallerConfigurationTests
         var workflowPath = Path.Combine(RepositoryRoot, ".github", "workflows", "publish.yml");
         var workflow     = File.ReadAllText(workflowPath);
 
-        Assert.Contains("msi_version: ${{ steps.calver.outputs.msi_version }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("MSI_VERSION=\"$(date -u +'%y.%-m').${{ github.run_number }}\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("-p:MsiVersion=\"$msiVersion\" `", workflow, StringComparison.Ordinal);
+        Assert.Matches(new Regex(@"^\s+msi_version:\s+\$\{\{\s*steps\.calver\.outputs\.msi_version\s*\}\}\s*$", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"^\s+MSI_VERSION=""\$\(date -u \+'%y\.%-m'\)\.\$\{\{\s*github\.run_number\s*\}\}""\s*$", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"^\s+-p:MsiVersion=""\$msiVersion""\s*`\s*$", RegexOptions.Multiline), workflow);
     }
 }
