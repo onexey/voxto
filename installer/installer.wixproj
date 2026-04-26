@@ -9,7 +9,7 @@
     <OutputName>voxto-dev</OutputName>
     <OutputPath>bin\</OutputPath>
     <IntermediateOutputPath>obj\</IntermediateOutputPath>
-    <DefineConstants>$(DefineConstants);Version=$(Version);PublishDir=$(PublishDir)</DefineConstants>
+    <DefineConstants>$(DefineConstants);Version=$(Version);MsiVersion=$(MsiVersion);PublishDir=$(PublishDir)</DefineConstants>
 
     <!--
       PublishDir must point to the dotnet publish output for the target RID.
