@@ -13,6 +13,61 @@ permissions:
 
 jobs:
 
+  changes:
+    name: Detect publishable changes
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decision.outputs.should_publish }}
+      reason: ${{ steps.decision.outputs.reason }}
+
+    steps:
+      - name: Checkout (pinned to the commit that passed CI)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Collect changed files
+        shell: bash
+        run: |
+          if git rev-parse HEAD^1 >/dev/null 2>&1; then
+            git diff --name-only HEAD^1 HEAD > changed-files.txt
+          else
+            git ls-tree -r --name-only HEAD > changed-files.txt
+          fi
+
+          echo "Changed files:"
+          if [[ -s changed-files.txt ]]; then
+            cat changed-files.txt
+          else
+            echo "(none)"
+          fi
+
+      - name: Decide whether to publish
+        id: decision
+        shell: pwsh
+        run: |
+          ./.github/scripts/should-publish.ps1 -ChangedFilesFile changed-files.txt |
+            Tee-Object -FilePath publish-decision.txt
+
+          Get-Content publish-decision.txt | ForEach-Object {
+            "$_" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Publish decision
+        run: echo "${{ steps.decision.outputs.reason }}"
+
+  skip:
+    name: Skip publish
+    needs: changes
+    if: needs.changes.outputs.should_publish != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Explain skipped release
+        run: echo "${{ needs.changes.outputs.reason }}"
+
   # ── 1. Compute CalVer version (runs once) ──────────────────────────────────
   #
   # Format: YYYY.M.D.<run-number>
@@ -21,7 +76,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   version:
     name: Compute version
-    if: github.event.workflow_run.conclusion == 'success'
+    needs: changes
+    if: needs.changes.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.calver.outputs.version }}
@@ -51,7 +107,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   build:
     name: Build (${{ matrix.rid }})
-    needs: version
+    needs: [changes, version]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -237,7 +293,7 @@ jobs:
   # ── 3. Create GitHub Release ───────────────────────────────────────────────
   release:
     name: Release v${{ needs.version.outputs.version }}
-    needs: [version, build]
+    needs: [changes, version, build]
     runs-on: ubuntu-latest
 
     steps:
