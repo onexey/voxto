@@ -100,13 +100,12 @@ All other content (architecture details, output formats, configuration reference
 - Private fields use `_camelCase`; public members use `PascalCase`.
 - Async methods are suffixed `Async`. Fire-and-forget tray handlers use `async void` (acceptable for event handlers only).
 - Prefer `using` declarations over `using` blocks where lifetime is clear.
-- Don't add unnecessary comments. Only add them when they make the code more meaningful.
+- Comments should add non-obvious context, rationale, or constraints; do not restate what the code already makes clear.
 - `ITranscriptionOutput` is the extension point for new output formats — implement the interface and register the instance in `OutputManager()`. No other file needs to change.
 
 ## Documentation style
 
-- Keep documentation clean and lean.
-- Avoid adding noise that distracts from the content.
+- Keep documentation concise, avoid repetition, and include only content that adds useful context.
 
 ### WPF + Windows Forms interop
 Both `System.Windows.Controls` and `System.Windows.Forms` are in scope. Resolve ambiguities with using aliases at the top of the file:
@@ -129,9 +128,12 @@ Use Serilog's static `Log` class. Levels:
 
 ## Self-review workflow
 
-- After completing the initial work, always delegate a subagent to perform a self-review.
-- Address the review comments.
-- Repeat the self-review cycle until there are no comments left to address.
+- After completing the initial work, always run a separate review pass on your changes.
+- If your environment supports a built-in review agent or a separate AI review session, use that as the reviewer.
+- If no such reviewer is available, perform a manual self-review of the changed files before finishing.
+- Address actionable review comments: concrete correctness, test, security, reliability, or maintainability issues that are in scope for the current task.
+- Repeat the review cycle only while actionable comments remain, and stop after at most 2 additional review passes after the initial review.
+- Do not continue iterating on non-actionable preferences, speculative ideas, or minor stylistic nits once the task requirements are satisfied.
 
 ---
 
