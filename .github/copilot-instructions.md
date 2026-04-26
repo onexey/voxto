@@ -100,7 +100,13 @@ All other content (architecture details, output formats, configuration reference
 - Private fields use `_camelCase`; public members use `PascalCase`.
 - Async methods are suffixed `Async`. Fire-and-forget tray handlers use `async void` (acceptable for event handlers only).
 - Prefer `using` declarations over `using` blocks where lifetime is clear.
+- Don't add unnecessary comments. Only add them when they make the code more meaningful.
 - `ITranscriptionOutput` is the extension point for new output formats — implement the interface and register the instance in `OutputManager()`. No other file needs to change.
+
+## Documentation style
+
+- Keep documentation clean and lean.
+- Avoid adding noise that distracts from the content.
 
 ### WPF + Windows Forms interop
 Both `System.Windows.Controls` and `System.Windows.Forms` are in scope. Resolve ambiguities with using aliases at the top of the file:
@@ -120,6 +126,12 @@ Use Serilog's static `Log` class. Levels:
 - `Log.Warning` — recoverable problems (no audio captured, missing file).
 - `Log.Error(ex, ...)` — exceptions that result in a user-visible failure.
 - `Log.Fatal(ex, ...)` — unhandled exceptions that may terminate the process.
+
+## Self-review workflow
+
+- After completing the initial work, always delegate a subagent to perform a self-review.
+- Address the review comments.
+- Repeat the self-review cycle until there are no comments left to address.
 
 ---
 
