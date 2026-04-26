@@ -3,6 +3,10 @@ bin/
 obj/
 publish/
 out/
+voxto-*.msi
+voxto-*.msi.sha256
+voxto-*.wixpdb
+voxto-*.zip
 
 # ── Visual Studio ─────────────────────────────────────────────────────────────
 .vs/
