@@ -12,7 +12,7 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 **MajorUpgrade** — Every new version unconditionally removes the previous one before installing. Stale files (removed DLLs, renamed binaries) are always cleaned up. Downgrading is blocked with a friendly error message.
 
-**File harvesting** — `installer.wixproj` uses `HarvestDirectory` to auto-discover every file in the `dotnet publish` output. No manual file list is maintained; new Whisper native DLLs added by NuGet upgrades are picked up automatically.
+**File harvesting** — `Package.wxs` uses WiX `Files Include="**"` authoring rooted at the published app directory, so every file from `dotnet publish` is picked up automatically. No manual file list is maintained; new Whisper native DLLs added by NuGet upgrades are included without extra installer edits.
 
 **No launch-after-install custom action** — Fresh installs are launched from the Start Menu shortcut created by the installer. Updates are handled by `UpdateService`'s PowerShell trampoline, which relaunches the app after `msiexec` finishes. This removes the need for architecture-specific WiX custom-action DLLs.
 
@@ -31,8 +31,8 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 ```
 installer/
-├── installer.wixproj   # WiX MSBuild project — controls version, publish dir, harvesting
-└── Package.wxs         # Package definition — install paths, shortcuts, upgrade config
+├── installer.wixproj   # WiX MSBuild project — controls version and publish-dir wiring
+└── Package.wxs         # Package definition — install paths, shortcuts, auto-harvested publish files
 ```
 
 ## Build locally
