@@ -58,6 +58,8 @@ voxto/
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
 │   ├── dependabot.yml
+│   ├── scripts/
+│   │   └── should-publish.ps1   # publish workflow filter for docs/.github-only commits
 │   └── workflows/
 │       ├── ci.yml            # CI Gate — runs all tests on PRs/push to main
 │       └── publish.yml       # CalVer build + sign + MSI + SHA-256 + GitHub Release

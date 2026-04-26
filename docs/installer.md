@@ -59,7 +59,7 @@ The MSI file appears in the current directory as `voxto-1.0.0.0-win-x64.msi`.
 
 ## CI/CD
 
-The `publish.yml` workflow builds the MSI automatically for every release. The key steps are:
+The `publish.yml` workflow builds the MSI automatically for successful `main`/`master` commits that change files outside `docs/` and `.github/`. The key steps are:
 
 1. `dotnet publish` — self-contained, all native DLLs flattened to the output root.
 2. Sign `voxto.exe` (skipped if `SIGNING_CERT_BASE64` secret is absent).
