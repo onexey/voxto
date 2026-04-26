@@ -119,11 +119,40 @@ public sealed class UpdateService : IDisposable
     }
 
     /// <summary>Cancels the background loop and waits for it to finish.</summary>
-    public void Stop()
+    public void Stop() => StopAsync().GetAwaiter().GetResult();
+
+    /// <summary>Cancels the background loop and waits for it to finish.</summary>
+    public async Task StopAsync()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _cts = null;
+        var cts            = _cts;
+        var backgroundLoop = _backgroundLoop;
+
+        if (cts is null && backgroundLoop is null)
+            return;
+
+        _cts            = null;
+        _backgroundLoop = null;
+
+        try
+        {
+            cts?.Cancel();
+
+            if (backgroundLoop is not null)
+            {
+                try
+                {
+                    await backgroundLoop.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cts?.IsCancellationRequested == true)
+                {
+                    // Expected when the loop observes the cancellation we requested.
+                }
+            }
+        }
+        finally
+        {
+            cts?.Dispose();
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -187,7 +216,7 @@ public sealed class UpdateService : IDisposable
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
             FileName        = "powershell.exe",
-            Arguments       = $"-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File \"{scriptPath}\"",
+            Arguments       = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File \"{scriptPath}\"",
             UseShellExecute = true,
             WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden
         });
@@ -237,6 +266,15 @@ public sealed class UpdateService : IDisposable
             if (remote is null || current is null || remote <= current)
             {
                 Log.Information("Already on latest version ({Current})", current);
+                PersistLastCheckTime();
+                return;
+            }
+
+            if (remote.Revision < 0)
+            {
+                Log.Warning(
+                    "Skipping update check because release tag {TagName} does not contain a 4-part version",
+                    release.TagName);
                 PersistLastCheckTime();
                 return;
             }

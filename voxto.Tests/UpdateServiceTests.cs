@@ -40,6 +40,18 @@ public class UpdateServiceTests
         Assert.Null(result);
     }
 
+    [Theory]
+    [InlineData("v2026.4.26")]
+    [InlineData("2026.4.26")]
+    public void ParseVersionFromTag_ThreePartTag_ReturnsVersionWithNegativeRevision(string tag)
+    {
+        // A 3-part tag parses successfully but has Revision == -1.
+        // CheckAndDownloadAsync guards against this to avoid ToString(4) throwing.
+        var result = UpdateService.ParseVersionFromTag(tag);
+        Assert.NotNull(result);
+        Assert.True(result!.Revision < 0, "Expected Revision to be negative for a 3-part version tag");
+    }
+
     // ── VerifySha256 ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -97,16 +109,24 @@ public class UpdateServiceTests
     }
 
     [Theory]
-    [InlineData(UpdateCheckInterval.Daily,  0,   false)] // checked 0 s ago → not due
-    [InlineData(UpdateCheckInterval.Daily,  23,  false)] // checked 23 h ago → not due
-    [InlineData(UpdateCheckInterval.Daily,  25,  true)]  // checked 25 h ago → due
-    [InlineData(UpdateCheckInterval.Weekly, 6,   false)] // checked 6 days ago → not due
-    [InlineData(UpdateCheckInterval.Weekly, 8,   true)]  // checked 8 days ago → due
-    public void IsDueForCheck_WithLastCheckOffset_ReturnsExpected(
-        UpdateCheckInterval interval, int hoursAgo, bool expectedDue)
+    [InlineData(0,  false)] // checked 0 h ago → not due
+    [InlineData(23, false)] // checked 23 h ago → not due
+    [InlineData(25, true)]  // checked 25 h ago → due
+    public void IsDueForCheck_DailyWithLastCheckHoursAgo_ReturnsExpected(
+        int hoursAgo, bool expectedDue)
     {
         var lastCheck = DateTime.UtcNow - TimeSpan.FromHours(hoursAgo);
-        Assert.Equal(expectedDue, UpdateService.IsDueForCheck(lastCheck, interval));
+        Assert.Equal(expectedDue, UpdateService.IsDueForCheck(lastCheck, UpdateCheckInterval.Daily));
+    }
+
+    [Theory]
+    [InlineData(6, false)] // checked 6 days ago → not due
+    [InlineData(8, true)]  // checked 8 days ago → due
+    public void IsDueForCheck_WeeklyWithLastCheckDaysAgo_ReturnsExpected(
+        int daysAgo, bool expectedDue)
+    {
+        var lastCheck = DateTime.UtcNow - TimeSpan.FromDays(daysAgo);
+        Assert.Equal(expectedDue, UpdateService.IsDueForCheck(lastCheck, UpdateCheckInterval.Weekly));
     }
 
     [Fact]
