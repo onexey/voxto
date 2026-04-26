@@ -181,7 +181,7 @@ public class RecorderService : IDisposable
             ModelDownloadStarted?.Invoke(_settings.ModelType);
             try
             {
-                using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(ggmlType);
+                using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ggmlType);
                 using var fileStream  = File.OpenWrite(modelPath);
                 await modelStream.CopyToAsync(fileStream);
                 Log.Information("Model downloaded successfully: {Model}", _settings.ModelType);
