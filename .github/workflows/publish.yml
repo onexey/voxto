@@ -25,14 +25,18 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.calver.outputs.version }}
+      msi_version: ${{ steps.calver.outputs.msi_version }}
 
     steps:
       - name: Compute CalVer
         id: calver
         run: |
           VERSION="$(date -u +'%Y.%-m.%-d').${{ github.run_number }}"
+          MSI_VERSION="$(date -u +'%y.%-m').${{ github.run_number }}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "msi_version=$MSI_VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
+          echo "MSI version: $MSI_VERSION"
 
   # ── 2. Build, sign, and package for each Windows target ───────────────────
   #
@@ -143,12 +147,13 @@ jobs:
       #
       # WixToolset.Sdk is pulled automatically by dotnet build from NuGet —
       # no separate WiX installation step is needed.
-      # HarvestDirectory (in installer.wixproj) discovers every file in the
-      # publish output, so new native DLLs are picked up automatically.
+      # Package.wxs harvests every file under the publish output directory, so
+      # new native DLLs are picked up automatically.
       - name: Build MSI
         shell: pwsh
         run: |
           $version  = "${{ needs.version.outputs.version }}"
+          $msiVersion = "${{ needs.version.outputs.msi_version }}"
           $rid      = "${{ matrix.rid }}"
           $msiName  = "voxto-$version-$rid"
           # Resolve-Path gives an absolute path; the trailing \ is required by WiX.
@@ -156,6 +161,7 @@ jobs:
 
           dotnet build installer/installer.wixproj `
             -p:Version="$version" `
+            -p:MsiVersion="$msiVersion" `
             -p:PublishDir="$pubDir" `
             -p:OutputName="$msiName" `
             -p:OutputPath="$(Resolve-Path .)\" `

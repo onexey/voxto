@@ -29,7 +29,7 @@
 
   <Package Name="Voxto"
            Manufacturer="Mesut Soylu"
-           Version="$(var.Version)"
+           Version="$(var.MsiVersion)"
            UpgradeCode="{7C9A5E2F-3B8D-4F1A-9E6C-2D5A8B0F3E7C}"
            Scope="perUser"
            Compressed="yes">
@@ -46,9 +46,10 @@
 
     <!--
       Install to %LocalAppData%\Programs\Voxto.
-      With Scope="perUser", ProgramFilesFolder maps to %LocalAppData%\Programs.
+      With Scope="perUser", ProgramFiles64Folder maps to that per-user Programs
+      directory while still satisfying ICE validation for 64-bit payloads.
     -->
-    <StandardDirectory Id="ProgramFilesFolder">
+    <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLDIR" Name="Voxto" />
     </StandardDirectory>
 
