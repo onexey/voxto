@@ -1,19 +1,27 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 using Voxto;
 
 namespace Voxto.Tests;
 
 /// <summary>
-/// Unit tests for the pure/static helper methods of <see cref="UpdateService"/>.
-///
-/// HTTP-dependent paths (FetchLatestRelease, DownloadWithProgress) are not tested
-/// here because they require a live network; integration coverage for those paths
-/// is out of scope for the unit-test project.
+/// Unit tests for <see cref="UpdateService"/> helpers and state transitions.
 /// </summary>
-public class UpdateServiceTests
+public class UpdateServiceTests : IDisposable
 {
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+    public UpdateServiceTests() => Directory.CreateDirectory(_tempDir);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+            Directory.Delete(_tempDir, recursive: true);
+    }
+
     // ── ParseVersionFromTag ───────────────────────────────────────────────────
 
     [Theory]
@@ -153,6 +161,89 @@ public class UpdateServiceTests
         Assert.DoesNotContain($"{Path.DirectorySeparatorChar}Programs{Path.DirectorySeparatorChar}", path, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CheckForUpdatesAsync_DiscoverOnly_PopulatesPendingStateWithoutDownloading()
+    {
+        const string version = "9999.1.1.1";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version)
+        };
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync(downloadAndApply: false);
+
+        Assert.Equal(version, service.PendingVersion);
+        Assert.Equal(UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture), service.PendingMsiFileName);
+        Assert.NotNull(service.PendingMsiDownloadUrl);
+        Assert.NotNull(service.PendingHashDownloadUrl);
+        Assert.Null(service.PendingMsiPath);
+        Assert.Equal([version], harness.AvailableVersions);
+        Assert.Empty(harness.FailedMessages);
+        Assert.Equal(0, harness.DownloadCallCount);
+        Assert.Equal(0, harness.ApplyCallCount);
+        Assert.Equal(0, harness.ReadyCount);
+        Assert.Equal(1, harness.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_DownloadAndApplyTrue_DownloadsResolvedPendingAssetAndApplies()
+    {
+        const string version = "9999.2.2.2";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version)
+        };
+        harness.HashResponse = $"{ComputeSha256HexFromContent(harness.DownloadPayload)}  {UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture)}";
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync(downloadAndApply: true);
+
+        Assert.Equal(version, service.PendingVersion);
+        Assert.Equal(UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture), service.PendingMsiFileName);
+        Assert.NotNull(service.PendingMsiPath);
+        Assert.EndsWith(service.PendingMsiFileName, service.PendingMsiPath!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, harness.DownloadCallCount);
+        Assert.Equal(1, harness.ApplyCallCount);
+        Assert.Equal(0, harness.ReadyCount);
+        Assert.Empty(harness.FailedMessages);
+        Assert.Equal(1, harness.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task DownloadAndApplyPendingUpdateAsync_WithoutPendingUpdate_RaisesActionableFailureMessage()
+    {
+        var harness = new UpdateServiceHarness(_tempDir);
+
+        using var service = harness.CreateService();
+
+        await service.DownloadAndApplyPendingUpdateAsync();
+
+        Assert.Equal(["No pending update is available to install. Run 'Check for Updates' first."], harness.FailedMessages);
+    }
+
+    [Fact]
+    public async Task DownloadAndApplyPendingUpdateAsync_WhenDownloadFails_RaisesUpdateFailedInsteadOfThrowing()
+    {
+        const string version = "9999.3.3.3";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version)
+        };
+
+        using var service = harness.CreateService();
+        await service.CheckForUpdatesAsync(downloadAndApply: false);
+
+        harness.DownloadException = new IOException("download failed");
+
+        await service.DownloadAndApplyPendingUpdateAsync();
+
+        Assert.Equal(["Update download/install failed. Please try again."], harness.FailedMessages);
+        Assert.Equal(0, harness.ApplyCallCount);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string ComputeSha256Hex(string path)
@@ -160,6 +251,23 @@ public class UpdateServiceTests
         using var sha  = SHA256.Create();
         using var file = File.OpenRead(path);
         return Convert.ToHexString(sha.ComputeHash(file));
+    }
+
+    private static string ComputeSha256HexFromContent(string content)
+    {
+        using var sha = SHA256.Create();
+        return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(content)));
+    }
+
+    private static UpdateService.ReleaseInfo CreateRelease(string version)
+    {
+        var msiFileName = UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture);
+        return new UpdateService.ReleaseInfo(
+            $"v{version}",
+            [
+                new UpdateService.ReleaseAssetInfo(msiFileName, "https://example.test/" + msiFileName),
+                new UpdateService.ReleaseAssetInfo($"{msiFileName}.sha256", "https://example.test/" + msiFileName + ".sha256")
+            ]);
     }
 
     // ── Temp file helper (IDisposable) ────────────────────────────────────────
@@ -173,5 +281,61 @@ public class UpdateServiceTests
             try { File.Delete(Path); }
             catch { /* best-effort cleanup */ }
         }
+    }
+
+    private sealed class UpdateServiceHarness
+    {
+        private readonly string _tempDir;
+
+        public UpdateServiceHarness(string tempDir) => _tempDir = tempDir;
+
+        public UpdateService.ReleaseInfo? ReleaseToReturn { get; set; }
+        public Exception? DownloadException { get; set; }
+        public string DownloadPayload { get; set; } = "voxto update payload";
+        public string HashResponse { get; set; } = string.Empty;
+        public int DownloadCallCount { get; private set; }
+        public int ApplyCallCount { get; private set; }
+        public int SaveCallCount { get; private set; }
+        public int ReadyCount { get; private set; }
+        public List<string> AvailableVersions { get; } = [];
+        public List<string> FailedMessages { get; } = [];
+
+        public UpdateService CreateService()
+        {
+            var service = new UpdateService(
+                new AppSettings(),
+                FetchLatestReleaseAsync,
+                DownloadAsync,
+                GetRemoteTextAsync,
+                PersistSettings,
+                () => ApplyCallCount++,
+                _tempDir);
+
+            service.UpdateAvailable += version => AvailableVersions.Add(version);
+            service.UpdateReady += () => ReadyCount++;
+            service.UpdateFailed += message => FailedMessages.Add(message);
+
+            return service;
+        }
+
+        private Task<UpdateService.ReleaseInfo?> FetchLatestReleaseAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(ReleaseToReturn);
+
+        private Task DownloadAsync(string url, string destinationPath, CancellationToken cancellationToken)
+        {
+            DownloadCallCount++;
+
+            if (DownloadException is not null)
+                return Task.FromException(DownloadException);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.WriteAllText(destinationPath, DownloadPayload);
+            return Task.CompletedTask;
+        }
+
+        private Task<string> GetRemoteTextAsync(string url, CancellationToken cancellationToken) =>
+            Task.FromResult(HashResponse);
+
+        private void PersistSettings(AppSettings settings) => SaveCallCount++;
     }
 }

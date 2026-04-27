@@ -145,7 +145,7 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
-    public void PackageWxs_LaunchesVoxtoAfterFreshInstall()
+    public void PackageWxs_ShowsOptionalLaunchCheckboxForFreshInstall_DefaultsOff()
     {
         var package = LoadXmlDocument("installer", "Package.wxs");
         var wixUi = package
