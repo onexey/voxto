@@ -20,11 +20,12 @@
     This guarantees that every Whisper native DLL lands in the installer
     without manual maintenance.
 
-  • Fresh installs auto-launch Voxto after InstallFinalize.  Upgrades do not,
-    because UpdateService already handles relaunch after msiexec finishes and
-    must remain the single restart path for in-app updates.
+  • Fresh interactive installs show an unchecked "Open Voxto when setup
+    finishes" checkbox on the final dialog. Silent installs do not launch the
+    app, and upgrade restarts remain owned by UpdateService.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="Voxto"
            Manufacturer="Mesut Soylu"
@@ -43,22 +44,26 @@
     <!-- Embed all files in a single CAB for a self-contained MSI. -->
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
-    <!--
-      Launch Voxto after a successful fresh install. Exclude upgrades so the
-      app's in-product updater remains the only relaunch path for MSI updates.
-    -->
+    <ui:WixUI Id="WixUI_Minimal" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT"
+              Value="Open Voxto when setup finishes" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX"
+              Value="0" />
+
     <CustomAction Id="LaunchInstalledApplication"
                   Directory="INSTALLDIR"
                   ExeCommand="voxto.exe"
                   Execute="immediate"
-                  Return="asyncNoWait"
-                  Impersonate="yes" />
+                  Return="asyncNoWait" />
 
-    <InstallExecuteSequence>
-      <Custom Action="LaunchInstalledApplication"
-              After="InstallFinalize"
-              Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
-    </InstallExecuteSequence>
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchInstalledApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
+    </UI>
 
     <!--
       Install to %LocalAppData%\Voxto.

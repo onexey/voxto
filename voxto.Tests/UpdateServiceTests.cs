@@ -144,6 +144,15 @@ public class UpdateServiceTests
         Assert.True(UpdateService.IsDueForCheck(lastCheck, UpdateCheckInterval.Weekly));
     }
 
+    [Fact]
+    public void GetInstalledExecutablePath_UsesLocalAppDataVoxtoDirectory()
+    {
+        var path = UpdateService.GetInstalledExecutablePath();
+
+        Assert.EndsWith(Path.Combine("Voxto", "voxto.exe"), path, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"{Path.DirectorySeparatorChar}Programs{Path.DirectorySeparatorChar}", path, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string ComputeSha256Hex(string path)

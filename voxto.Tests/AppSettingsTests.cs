@@ -204,4 +204,21 @@ public class AppSettingsTests : IDisposable
         var loaded = AppSettings.Load(TempFile);
         Assert.Equal(path, loaded.TodoFilePath);
     }
+
+    [Fact]
+    public void NewInstance_DefaultAutoDownloadInstallRestart_IsFalse()
+    {
+        var settings = new AppSettings();
+        Assert.False(settings.AutoDownloadInstallRestartEnabled);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesAutoDownloadInstallRestartEnabled()
+    {
+        var original = new AppSettings { AutoDownloadInstallRestartEnabled = true };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.True(loaded.AutoDownloadInstallRestartEnabled);
+    }
 }

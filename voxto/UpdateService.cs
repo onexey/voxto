@@ -93,6 +93,9 @@ public sealed class UpdateService : IDisposable
     /// </summary>
     public string? PendingMsiPath { get; private set; }
 
+    private string? PendingMsiDownloadUrl { get; set; }
+    private string? PendingHashDownloadUrl { get; set; }
+
     // ── Internal state ────────────────────────────────────────────────────────
 
     private AppSettings              _settings;
@@ -161,10 +164,19 @@ public sealed class UpdateService : IDisposable
     /// Runs an immediate update check regardless of the scheduled interval.
     /// Safe to call from any thread.
     /// </summary>
-    public async Task CheckForUpdatesAsync()
+    public async Task CheckForUpdatesAsync(bool downloadAndApply = false)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        await CheckAndDownloadAsync(cts.Token).ConfigureAwait(false);
+        await CheckAndDownloadAsync(cts.Token, downloadAndApply).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Downloads, verifies, and installs the already-detected pending update.
+    /// </summary>
+    public async Task DownloadAndApplyPendingUpdateAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        await DownloadPendingUpdateAsync(cts.Token, applyAfterDownload: true).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -185,11 +197,7 @@ public sealed class UpdateService : IDisposable
 
         Log.Information("Applying update from {Msi}", PendingMsiPath);
 
-        // The MSI installs to %LocalAppData%\Programs\Voxto (per-user, no UAC).
-        var installDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Programs", "Voxto");
-        var newExe     = Path.Combine(installDir, "voxto.exe");
+        var newExe     = GetInstalledExecutablePath();
         var logPath    = Path.Combine(Path.GetTempPath(), "voxto_update.log");
         var scriptPath = Path.Combine(Path.GetTempPath(), "voxto_update.ps1");
 
@@ -236,7 +244,7 @@ public sealed class UpdateService : IDisposable
         while (!ct.IsCancellationRequested)
         {
             if (_settings.AutoUpdateEnabled && IsDueForCheck(_settings.LastUpdateCheck, _settings.UpdateCheckInterval))
-                await CheckAndDownloadAsync(ct).ConfigureAwait(false);
+                await CheckAndDownloadAsync(ct, _settings.AutoDownloadInstallRestartEnabled).ConfigureAwait(false);
 
             // Wake up hourly; the actual check is gated by IsDueForCheck.
             await Task.Delay(TimeSpan.FromHours(1), ct).ConfigureAwait(false);
@@ -245,7 +253,7 @@ public sealed class UpdateService : IDisposable
 
     // ── Core check logic ──────────────────────────────────────────────────────
 
-    private async Task CheckAndDownloadAsync(CancellationToken ct)
+    private async Task CheckAndDownloadAsync(CancellationToken ct, bool downloadAndApply)
     {
         try
         {
@@ -266,6 +274,7 @@ public sealed class UpdateService : IDisposable
             if (remote is null || current is null || remote <= current)
             {
                 Log.Information("Already on latest version ({Current})", current);
+                ClearPendingUpdate();
                 PersistLastCheckTime();
                 return;
             }
@@ -275,14 +284,13 @@ public sealed class UpdateService : IDisposable
                 Log.Warning(
                     "Skipping update check because release tag {TagName} does not contain a 4-part version",
                     release.TagName);
+                ClearPendingUpdate();
                 PersistLastCheckTime();
                 return;
             }
 
             var remoteStr = remote.ToString(4);
             Log.Information("Update available: {Remote} (current: {Current})", remoteStr, current);
-            PendingVersion = remoteStr;
-            UpdateAvailable?.Invoke(remoteStr);
 
             // ── 3. Resolve architecture-specific assets ────────────────────
             var rid      = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
@@ -295,39 +303,27 @@ public sealed class UpdateService : IDisposable
 
             if (msiAsset is null || hashAsset is null)
             {
+                ClearPendingUpdate();
                 var msg = $"No installer found for {rid} in release {remoteStr}.";
                 Log.Warning("Update asset not found — {Message}", msg);
                 UpdateFailed?.Invoke(msg);
                 return;
             }
 
-            // ── 4. Download MSI ────────────────────────────────────────────
-            Directory.CreateDirectory(UpdateCacheDir);
-            var destPath = Path.Combine(UpdateCacheDir, msiName);
+            PendingVersion         = remoteStr;
+            PendingMsiDownloadUrl  = msiAsset.BrowserDownloadUrl;
+            PendingHashDownloadUrl = hashAsset.BrowserDownloadUrl;
+            PendingMsiPath         = null;
 
-            Log.Information("Downloading {Asset} to {Path}", msiName, destPath);
-            await DownloadWithProgressAsync(msiAsset.BrowserDownloadUrl, destPath, ct)
-                .ConfigureAwait(false);
+            UpdateAvailable?.Invoke(remoteStr);
 
-            // ── 5. Verify SHA-256 ──────────────────────────────────────────
-            var rawHash      = await Http.GetStringAsync(hashAsset.BrowserDownloadUrl, ct)
-                                         .ConfigureAwait(false);
-            // Handle both bare-hash and "HASH  filename" (sha256sum) formats.
-            var expectedHash = rawHash.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-
-            if (!VerifySha256(destPath, expectedHash))
+            if (downloadAndApply)
             {
-                File.Delete(destPath);
-                const string integrityError = "Update integrity check failed — downloaded file deleted. Please try again.";
-                Log.Error("SHA-256 mismatch for {File}", msiName);
-                UpdateFailed?.Invoke(integrityError);
+                await DownloadPendingUpdateAsync(ct, applyAfterDownload: true).ConfigureAwait(false);
                 return;
             }
 
-            Log.Information("Update {Version} downloaded and verified", remoteStr);
-            PendingMsiPath = destPath;
             PersistLastCheckTime();
-            UpdateReady?.Invoke();
         }
         catch (OperationCanceledException)
         {
@@ -338,6 +334,51 @@ public sealed class UpdateService : IDisposable
             Log.Error(ex, "Update check failed");
             UpdateFailed?.Invoke(ex.Message);
         }
+    }
+
+    private async Task DownloadPendingUpdateAsync(CancellationToken ct, bool applyAfterDownload)
+    {
+        if (PendingVersion is null || PendingMsiDownloadUrl is null || PendingHashDownloadUrl is null)
+        {
+            const string noPendingUpdateError = "No pending update is available to install.";
+            Log.Warning(noPendingUpdateError);
+            UpdateFailed?.Invoke(noPendingUpdateError);
+            return;
+        }
+
+        var rid      = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                     ? "win-arm64" : "win-x64";
+        var msiName  = $"voxto-{PendingVersion}-{rid}.msi";
+
+        Directory.CreateDirectory(UpdateCacheDir);
+        var destPath = Path.Combine(UpdateCacheDir, msiName);
+
+        Log.Information("Downloading {Asset} to {Path}", msiName, destPath);
+        await DownloadWithProgressAsync(PendingMsiDownloadUrl, destPath, ct).ConfigureAwait(false);
+
+        var rawHash = await Http.GetStringAsync(PendingHashDownloadUrl, ct).ConfigureAwait(false);
+        var expectedHash = rawHash.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+
+        if (!VerifySha256(destPath, expectedHash))
+        {
+            File.Delete(destPath);
+            const string integrityError = "Update integrity check failed — downloaded file deleted. Please try again.";
+            Log.Error("SHA-256 mismatch for {File}", msiName);
+            UpdateFailed?.Invoke(integrityError);
+            return;
+        }
+
+        Log.Information("Update {Version} downloaded and verified", PendingVersion);
+        PendingMsiPath = destPath;
+        PersistLastCheckTime();
+
+        if (applyAfterDownload)
+        {
+            ApplyUpdateAndRestart();
+            return;
+        }
+
+        UpdateReady?.Invoke();
     }
 
     // ── GitHub API ────────────────────────────────────────────────────────────
@@ -420,6 +461,11 @@ public sealed class UpdateService : IDisposable
         return DateTime.UtcNow - lastCheck.Value >= threshold;
     }
 
+    internal static string GetInstalledExecutablePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Voxto",
+        "voxto.exe");
+
     /// <summary>
     /// Computes the SHA-256 of <paramref name="filePath"/> and compares it
     /// (case-insensitively) against <paramref name="expectedHex"/>.
@@ -439,6 +485,14 @@ public sealed class UpdateService : IDisposable
     {
         _settings.LastUpdateCheck = DateTime.UtcNow;
         _settings.Save();
+    }
+
+    private void ClearPendingUpdate()
+    {
+        PendingVersion         = null;
+        PendingMsiPath         = null;
+        PendingMsiDownloadUrl  = null;
+        PendingHashDownloadUrl = null;
     }
 
     // ── GitHub API DTOs ───────────────────────────────────────────────────────

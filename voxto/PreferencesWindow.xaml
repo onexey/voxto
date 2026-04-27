@@ -121,6 +121,10 @@
                                   Checked="OnAutoUpdateChanged"
                                   Unchecked="OnAutoUpdateChanged"/>
 
+                        <CheckBox x:Name="AutoInstallUpdateCheck"
+                                  Content="Automatically download, install, and restart when an update is available"
+                                  Margin="18,2,0,2"/>
+
                         <!-- Frequency row — enabled only when auto-update is on -->
                         <DockPanel x:Name="UpdateFrequencyRow" Margin="18,4,0,4">
                             <TextBlock Text="Frequency:"

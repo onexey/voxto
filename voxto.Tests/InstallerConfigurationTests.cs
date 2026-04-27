@@ -148,20 +148,34 @@ public class InstallerConfigurationTests
     public void PackageWxs_LaunchesVoxtoAfterFreshInstall()
     {
         var package = LoadXmlDocument("installer", "Package.wxs");
+        var wixUi = package
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "WixUI", StringComparison.Ordinal));
+        var checkboxTextProperty = package
+            .Descendants(WixNamespace + "Property")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT", StringComparison.Ordinal));
+        var checkboxValueProperty = package
+            .Descendants(WixNamespace + "Property")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "WIXUI_EXITDIALOGOPTIONALCHECKBOX", StringComparison.Ordinal));
         var customAction = package
             .Descendants(WixNamespace + "CustomAction")
             .Single(element => string.Equals(element.Attribute("Id")?.Value, "LaunchInstalledApplication", StringComparison.Ordinal));
-        var scheduledAction = package
-            .Descendants(WixNamespace + "Custom")
-            .Single(element => string.Equals(element.Attribute("Action")?.Value, "LaunchInstalledApplication", StringComparison.Ordinal));
+        var publish = package
+            .Descendants(WixNamespace + "Publish")
+            .Single(element => string.Equals(element.Attribute("Value")?.Value, "LaunchInstalledApplication", StringComparison.Ordinal));
 
+        Assert.Equal("WixUI_Minimal", wixUi.Attribute("Id")?.Value);
+        Assert.Equal("Open Voxto when setup finishes", checkboxTextProperty.Attribute("Value")?.Value);
+        Assert.Equal("0", checkboxValueProperty.Attribute("Value")?.Value);
         Assert.Equal("INSTALLDIR", customAction.Attribute("Directory")?.Value);
         Assert.Equal("voxto.exe", customAction.Attribute("ExeCommand")?.Value);
         Assert.Equal("immediate", customAction.Attribute("Execute")?.Value);
         Assert.Equal("asyncNoWait", customAction.Attribute("Return")?.Value);
-        Assert.Equal("yes", customAction.Attribute("Impersonate")?.Value);
-        Assert.Equal("InstallFinalize", scheduledAction.Attribute("After")?.Value);
-        Assert.Equal("NOT Installed AND NOT WIX_UPGRADE_DETECTED", scheduledAction.Attribute("Condition")?.Value);
+        Assert.Null(customAction.Attribute("Impersonate"));
+        Assert.Equal("ExitDialog", publish.Attribute("Dialog")?.Value);
+        Assert.Equal("Finish", publish.Attribute("Control")?.Value);
+        Assert.Equal("DoAction", publish.Attribute("Event")?.Value);
+        Assert.Equal("WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed AND NOT WIX_UPGRADE_DETECTED", publish.Attribute("Condition")?.Value);
     }
 
     [Fact]

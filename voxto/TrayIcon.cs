@@ -179,6 +179,14 @@ public class TrayIcon : IDisposable
             return;
         }
 
+        if (_updateService.PendingVersion is not null)
+        {
+            _updateItem.Enabled = false;
+            _updateItem.Text    = $"⬇  Installing v{_updateService.PendingVersion}…";
+            await _updateService.DownloadAndApplyPendingUpdateAsync();
+            return;
+        }
+
         // Otherwise kick off an on-demand check.
         _updateItem.Enabled = false;
         _updateItem.Text    = "🔄  Checking…";
@@ -204,9 +212,17 @@ public class TrayIcon : IDisposable
         Application.Current.Dispatcher.Invoke(() =>
         {
             Log.Information("Update available: {Version}", version);
-            _updateItem.Text    = $"⬇  Downloading v{version}…";
-            _updateItem.Enabled = false;
-            ShowNotificationPill($"Update v{version} downloading…", PillBlue, durationMs: 5000);
+            if (_settings.AutoDownloadInstallRestartEnabled)
+            {
+                _updateItem.Text    = $"⬇  Downloading and installing v{version}…";
+                _updateItem.Enabled = false;
+                ShowNotificationPill($"Update v{version} downloading and installing…", PillBlue, durationMs: 5000);
+                return;
+            }
+
+            _updateItem.Text    = $"↺  Install Update v{version}";
+            _updateItem.Enabled = true;
+            ShowNotificationPill($"Update v{version} available — click tray to install", PillBlue, durationMs: 8000);
         });
     }
 

@@ -82,6 +82,12 @@ public class AppSettings
     public bool AutoUpdateEnabled { get; set; } = true;
 
     /// <summary>
+    /// Whether a discovered update should be downloaded, installed, and restarted
+    /// automatically after a background check. Defaults to <c>false</c>.
+    /// </summary>
+    public bool AutoDownloadInstallRestartEnabled { get; set; }
+
+    /// <summary>
     /// How often the background update check should run.
     /// Defaults to <see cref="UpdateCheckInterval.Weekly"/>.
     /// </summary>
