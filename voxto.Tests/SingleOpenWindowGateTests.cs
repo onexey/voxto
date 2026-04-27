@@ -59,4 +59,21 @@ public class SingleOpenWindowGateTests
 
         Assert.Same(trackedWindow, existingWindow);
     }
+
+    [Fact]
+    public void TrySet_AfterClear_AllowsTrackingReplacementWindow()
+    {
+        var gate = new SingleOpenWindowGate<object>();
+        var firstWindow = new object();
+        var replacementWindow = new object();
+
+        gate.TrySet(firstWindow);
+        gate.Clear(firstWindow);
+
+        var added = gate.TrySet(replacementWindow);
+        gate.TryGetExisting(out var existingWindow);
+
+        Assert.True(added);
+        Assert.Same(replacementWindow, existingWindow);
+    }
 }
