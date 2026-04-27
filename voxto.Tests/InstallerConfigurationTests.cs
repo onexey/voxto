@@ -161,7 +161,7 @@ public class InstallerConfigurationTests
         Assert.Equal("asyncNoWait", customAction.Attribute("Return")?.Value);
         Assert.Equal("yes", customAction.Attribute("Impersonate")?.Value);
         Assert.Equal("InstallFinalize", scheduledAction.Attribute("After")?.Value);
-        Assert.Equal("NOT Installed AND NOT WIX_UPGRADE_DETECTED", scheduledAction.Value.Trim());
+        Assert.Equal("NOT Installed AND NOT WIX_UPGRADE_DETECTED", scheduledAction.Attribute("Condition")?.Value);
     }
 
     [Fact]

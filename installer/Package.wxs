@@ -56,9 +56,8 @@
 
     <InstallExecuteSequence>
       <Custom Action="LaunchInstalledApplication"
-              After="InstallFinalize">
-        NOT Installed AND NOT WIX_UPGRADE_DETECTED
-      </Custom>
+              After="InstallFinalize"
+              Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
     </InstallExecuteSequence>
 
     <!--
