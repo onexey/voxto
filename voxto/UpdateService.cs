@@ -39,7 +39,7 @@ public sealed class UpdateService : IDisposable
     private const string ApiBase = $"https://api.github.com/repos/{Owner}/{Repo}";
 
     // Cache directory inside the existing Voxto data folder.
-    private static readonly string UpdateCacheDir = Path.Combine(
+    private static readonly string DefaultUpdateCacheDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Voxto", "updates");
 
@@ -61,8 +61,9 @@ public sealed class UpdateService : IDisposable
 
     /// <summary>
     /// Fired when a newer release is detected on GitHub. Argument is the new
-    /// version string (e.g. <c>"2026.4.26.1"</c>). The download is already in
-    /// progress at this point.
+    /// version string (e.g. <c>"2026.4.26.1"</c>). Depending on settings, the
+    /// update either remains pending for the user to install or proceeds into
+    /// automatic download/install.
     /// </summary>
     public event Action<string>? UpdateAvailable;
 
@@ -93,14 +94,45 @@ public sealed class UpdateService : IDisposable
     /// </summary>
     public string? PendingMsiPath { get; private set; }
 
+    internal string? PendingMsiFileName { get; private set; }
+    internal string? PendingMsiDownloadUrl { get; private set; }
+    internal string? PendingHashDownloadUrl { get; private set; }
+
     // ── Internal state ────────────────────────────────────────────────────────
 
+    private readonly Func<CancellationToken, Task<ReleaseInfo?>> _fetchLatestReleaseAsync;
+    private readonly Func<string, string, CancellationToken, Task> _downloadAssetAsync;
+    private readonly Func<string, CancellationToken, Task<string>> _getRemoteTextAsync;
+    private readonly Action<AppSettings> _persistSettings;
+    private readonly Action _applyPendingUpdateAndRestart;
+    private readonly string _updateCacheDir;
     private AppSettings              _settings;
     private CancellationTokenSource? _cts;
     private Task?                    _backgroundLoop;
 
     /// <summary>Creates the service with the current application settings.</summary>
-    public UpdateService(AppSettings settings) => _settings = settings;
+    public UpdateService(AppSettings settings)
+        : this(settings, null, null, null, null, null, null)
+    {
+    }
+
+    internal UpdateService(
+        AppSettings settings,
+        Func<CancellationToken, Task<ReleaseInfo?>>? fetchLatestReleaseAsync,
+        Func<string, string, CancellationToken, Task>? downloadAssetAsync,
+        Func<string, CancellationToken, Task<string>>? getRemoteTextAsync,
+        Action<AppSettings>? persistSettings,
+        Action? applyPendingUpdateAndRestart,
+        string? updateCacheDir)
+    {
+        _settings                    = settings;
+        _fetchLatestReleaseAsync     = fetchLatestReleaseAsync ?? FetchLatestReleaseAsync;
+        _downloadAssetAsync          = downloadAssetAsync ?? DownloadWithProgressAsync;
+        _getRemoteTextAsync          = getRemoteTextAsync ?? ((url, ct) => Http.GetStringAsync(url, ct));
+        _persistSettings             = persistSettings ?? (savedSettings => savedSettings.Save());
+        _applyPendingUpdateAndRestart = applyPendingUpdateAndRestart ?? ApplyUpdateAndRestart;
+        _updateCacheDir              = updateCacheDir ?? DefaultUpdateCacheDir;
+    }
 
     /// <summary>
     /// Updates the settings reference. Call this after the user saves preferences
@@ -161,10 +193,34 @@ public sealed class UpdateService : IDisposable
     /// Runs an immediate update check regardless of the scheduled interval.
     /// Safe to call from any thread.
     /// </summary>
-    public async Task CheckForUpdatesAsync()
+    public async Task CheckForUpdatesAsync(bool downloadAndApply = false)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        await CheckAndDownloadAsync(cts.Token).ConfigureAwait(false);
+        await CheckAndDownloadAsync(cts.Token, downloadAndApply).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Downloads, verifies, and installs the already-detected pending update.
+    /// </summary>
+    public async Task DownloadAndApplyPendingUpdateAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        try
+        {
+            await DownloadPendingUpdateAsync(cts.Token, applyAfterDownload: true).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            const string timeoutError = "Update download/install timed out. Please try again.";
+            Log.Warning(timeoutError);
+            UpdateFailed?.Invoke(timeoutError);
+        }
+        catch (Exception ex)
+        {
+            const string installError = "Update download/install failed. Please try again.";
+            Log.Error(ex, "Pending update install failed");
+            UpdateFailed?.Invoke(installError);
+        }
     }
 
     /// <summary>
@@ -185,11 +241,7 @@ public sealed class UpdateService : IDisposable
 
         Log.Information("Applying update from {Msi}", PendingMsiPath);
 
-        // The MSI installs to %LocalAppData%\Programs\Voxto (per-user, no UAC).
-        var installDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Programs", "Voxto");
-        var newExe     = Path.Combine(installDir, "voxto.exe");
+        var newExe     = GetInstalledExecutablePath();
         var logPath    = Path.Combine(Path.GetTempPath(), "voxto_update.log");
         var scriptPath = Path.Combine(Path.GetTempPath(), "voxto_update.ps1");
 
@@ -236,7 +288,7 @@ public sealed class UpdateService : IDisposable
         while (!ct.IsCancellationRequested)
         {
             if (_settings.AutoUpdateEnabled && IsDueForCheck(_settings.LastUpdateCheck, _settings.UpdateCheckInterval))
-                await CheckAndDownloadAsync(ct).ConfigureAwait(false);
+                await CheckAndDownloadAsync(ct, _settings.AutoDownloadInstallRestartEnabled).ConfigureAwait(false);
 
             // Wake up hourly; the actual check is gated by IsDueForCheck.
             await Task.Delay(TimeSpan.FromHours(1), ct).ConfigureAwait(false);
@@ -245,14 +297,14 @@ public sealed class UpdateService : IDisposable
 
     // ── Core check logic ──────────────────────────────────────────────────────
 
-    private async Task CheckAndDownloadAsync(CancellationToken ct)
+    private async Task CheckAndDownloadAsync(CancellationToken ct, bool downloadAndApply)
     {
         try
         {
             Log.Information("Checking for Voxto updates…");
 
             // ── 1. Query GitHub Releases API ───────────────────────────────
-            var release = await FetchLatestReleaseAsync(ct).ConfigureAwait(false);
+            var release = await _fetchLatestReleaseAsync(ct).ConfigureAwait(false);
             if (release is null)
             {
                 Log.Warning("No releases found on GitHub — skipping update check");
@@ -266,6 +318,7 @@ public sealed class UpdateService : IDisposable
             if (remote is null || current is null || remote <= current)
             {
                 Log.Information("Already on latest version ({Current})", current);
+                ClearPendingUpdate();
                 PersistLastCheckTime();
                 return;
             }
@@ -275,19 +328,17 @@ public sealed class UpdateService : IDisposable
                 Log.Warning(
                     "Skipping update check because release tag {TagName} does not contain a 4-part version",
                     release.TagName);
+                ClearPendingUpdate();
                 PersistLastCheckTime();
                 return;
             }
 
             var remoteStr = remote.ToString(4);
             Log.Information("Update available: {Remote} (current: {Current})", remoteStr, current);
-            PendingVersion = remoteStr;
-            UpdateAvailable?.Invoke(remoteStr);
 
             // ── 3. Resolve architecture-specific assets ────────────────────
-            var rid      = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
-                         ? "win-arm64" : "win-x64";
-            var msiName  = $"voxto-{remoteStr}-{rid}.msi";
+            var rid      = GetRuntimeIdentifier(RuntimeInformation.ProcessArchitecture);
+            var msiName  = BuildMsiFileName(remoteStr, RuntimeInformation.ProcessArchitecture);
             var hashName = $"{msiName}.sha256";
 
             var msiAsset  = release.Assets.FirstOrDefault(a => a.Name == msiName);
@@ -295,39 +346,28 @@ public sealed class UpdateService : IDisposable
 
             if (msiAsset is null || hashAsset is null)
             {
+                ClearPendingUpdate();
                 var msg = $"No installer found for {rid} in release {remoteStr}.";
                 Log.Warning("Update asset not found — {Message}", msg);
                 UpdateFailed?.Invoke(msg);
                 return;
             }
 
-            // ── 4. Download MSI ────────────────────────────────────────────
-            Directory.CreateDirectory(UpdateCacheDir);
-            var destPath = Path.Combine(UpdateCacheDir, msiName);
+            PendingVersion         = remoteStr;
+            PendingMsiFileName     = msiName;
+            PendingMsiDownloadUrl  = msiAsset.BrowserDownloadUrl;
+            PendingHashDownloadUrl = hashAsset.BrowserDownloadUrl;
+            PendingMsiPath         = null;
 
-            Log.Information("Downloading {Asset} to {Path}", msiName, destPath);
-            await DownloadWithProgressAsync(msiAsset.BrowserDownloadUrl, destPath, ct)
-                .ConfigureAwait(false);
+            UpdateAvailable?.Invoke(remoteStr);
 
-            // ── 5. Verify SHA-256 ──────────────────────────────────────────
-            var rawHash      = await Http.GetStringAsync(hashAsset.BrowserDownloadUrl, ct)
-                                         .ConfigureAwait(false);
-            // Handle both bare-hash and "HASH  filename" (sha256sum) formats.
-            var expectedHash = rawHash.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-
-            if (!VerifySha256(destPath, expectedHash))
+            if (downloadAndApply)
             {
-                File.Delete(destPath);
-                const string integrityError = "Update integrity check failed — downloaded file deleted. Please try again.";
-                Log.Error("SHA-256 mismatch for {File}", msiName);
-                UpdateFailed?.Invoke(integrityError);
+                await DownloadPendingUpdateAsync(ct, applyAfterDownload: true).ConfigureAwait(false);
                 return;
             }
 
-            Log.Information("Update {Version} downloaded and verified", remoteStr);
-            PendingMsiPath = destPath;
             PersistLastCheckTime();
-            UpdateReady?.Invoke();
         }
         catch (OperationCanceledException)
         {
@@ -340,22 +380,48 @@ public sealed class UpdateService : IDisposable
         }
     }
 
-    // ── GitHub API ────────────────────────────────────────────────────────────
-
-    private async Task<GitHubRelease?> FetchLatestReleaseAsync(CancellationToken ct)
+    private async Task DownloadPendingUpdateAsync(CancellationToken ct, bool applyAfterDownload)
     {
-        try
+        if (PendingVersion is null || PendingMsiFileName is null || PendingMsiDownloadUrl is null || PendingHashDownloadUrl is null)
         {
-            return await Http
-                .GetFromJsonAsync<GitHubRelease>($"{ApiBase}/releases/latest", ct)
-                .ConfigureAwait(false);
+            const string noPendingUpdateError = "No pending update is available to install. Run 'Check for Updates' first.";
+            Log.Warning(noPendingUpdateError);
+            UpdateFailed?.Invoke(noPendingUpdateError);
+            return;
         }
-        catch (HttpRequestException ex)
+
+        Directory.CreateDirectory(_updateCacheDir);
+        var destPath = Path.Combine(_updateCacheDir, PendingMsiFileName);
+
+        Log.Information("Downloading {Asset} to {Path}", PendingMsiFileName, destPath);
+        await _downloadAssetAsync(PendingMsiDownloadUrl, destPath, ct).ConfigureAwait(false);
+
+        var rawHash = await _getRemoteTextAsync(PendingHashDownloadUrl, ct).ConfigureAwait(false);
+        var expectedHash = rawHash.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+
+        if (!VerifySha256(destPath, expectedHash))
         {
-            Log.Warning(ex, "GitHub API request failed");
-            return null;
+            File.Delete(destPath);
+            const string integrityError = "Update integrity check failed — downloaded file deleted. Please try again.";
+            Log.Error("SHA-256 mismatch for {File}", PendingMsiFileName);
+            UpdateFailed?.Invoke(integrityError);
+            return;
         }
+
+        Log.Information("Update {Version} downloaded and verified", PendingVersion);
+        PendingMsiPath = destPath;
+        PersistLastCheckTime();
+
+        if (applyAfterDownload)
+        {
+            _applyPendingUpdateAndRestart();
+            return;
+        }
+
+        UpdateReady?.Invoke();
     }
+
+    // ── GitHub API ────────────────────────────────────────────────────────────
 
     // ── Download with progress ────────────────────────────────────────────────
 
@@ -420,6 +486,17 @@ public sealed class UpdateService : IDisposable
         return DateTime.UtcNow - lastCheck.Value >= threshold;
     }
 
+    internal static string GetInstalledExecutablePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Voxto",
+        "voxto.exe");
+
+    internal static string GetRuntimeIdentifier(Architecture architecture) =>
+        architecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
+
+    internal static string BuildMsiFileName(string version, Architecture architecture) =>
+        $"voxto-{version}-{GetRuntimeIdentifier(architecture)}.msi";
+
     /// <summary>
     /// Computes the SHA-256 of <paramref name="filePath"/> and compares it
     /// (case-insensitively) against <paramref name="expectedHex"/>.
@@ -438,8 +515,21 @@ public sealed class UpdateService : IDisposable
     private void PersistLastCheckTime()
     {
         _settings.LastUpdateCheck = DateTime.UtcNow;
-        _settings.Save();
+        _persistSettings(_settings);
     }
+
+    private void ClearPendingUpdate()
+    {
+        PendingVersion         = null;
+        PendingMsiFileName     = null;
+        PendingMsiPath         = null;
+        PendingMsiDownloadUrl  = null;
+        PendingHashDownloadUrl = null;
+    }
+
+    internal sealed record ReleaseInfo(string TagName, IReadOnlyList<ReleaseAssetInfo> Assets);
+
+    internal sealed record ReleaseAssetInfo(string Name, string BrowserDownloadUrl);
 
     // ── GitHub API DTOs ───────────────────────────────────────────────────────
 
@@ -450,6 +540,27 @@ public sealed class UpdateService : IDisposable
     private sealed record GitHubAsset(
         [property: JsonPropertyName("name")]                  string Name,
         [property: JsonPropertyName("browser_download_url")] string BrowserDownloadUrl);
+
+    private async Task<ReleaseInfo?> FetchLatestReleaseAsync(CancellationToken ct)
+    {
+        try
+        {
+            var release = await Http
+                .GetFromJsonAsync<GitHubRelease>($"{ApiBase}/releases/latest", ct)
+                .ConfigureAwait(false);
+
+            return release is null
+                ? null
+                : new ReleaseInfo(
+                    release.TagName,
+                    release.Assets.Select(asset => new ReleaseAssetInfo(asset.Name, asset.BrowserDownloadUrl)).ToArray());
+        }
+        catch (HttpRequestException ex)
+        {
+            Log.Warning(ex, "GitHub API request failed");
+            return null;
+        }
+    }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
 

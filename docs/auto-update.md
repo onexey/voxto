@@ -1,10 +1,16 @@
 # Auto-Update
 
-Voxto can check GitHub Releases for newer versions, download the installer in the background, verify its integrity, and apply it with a single click — no manual download or UAC prompt required.
+Voxto can check GitHub Releases for newer versions, notify you when one is available, and optionally download, install, and restart automatically — all without a UAC prompt.
 
 ## How it works
 
-The update flow has five stages:
+The update flow depends on your **Preferences → General → Updates** settings:
+
+- **Check for updates automatically** — background checks run on the configured schedule.
+- **Automatically download, install, and restart when an update is available** — background checks continue into download + install + restart.
+- If that second checkbox is off, Voxto stops after discovery and waits for you to click **Install Update** in the tray menu.
+
+The underlying update flow has five stages:
 
 **1. Periodic check** — On startup (after a 45-second delay) and then every hour, `UpdateService` checks whether enough time has elapsed since the last successful check. If so, it calls the GitHub Releases API:
 
@@ -12,13 +18,13 @@ The update flow has five stages:
 GET https://api.github.com/repos/onexey/voxto/releases/latest
 ```
 
-**2. Version comparison** — The `tag_name` from the response (e.g. `v2026.4.26.1`) is parsed into a `System.Version` and compared against the running assembly version. If the remote version is strictly greater, a download begins.
+**2. Version comparison** — The `tag_name` from the response (e.g. `v2026.4.26.1`) is parsed into a `System.Version` and compared against the running assembly version. If the remote version is strictly greater, Voxto either notifies you that an update is ready to install or immediately continues into download/install based on your preferences.
 
-**3. Background download** — The architecture-appropriate MSI asset is streamed to `%LocalAppData%\Voxto\updates\`. A `.sha256` sidecar file is downloaded from the same release and used for integrity verification.
+**3. Download** — When the update is being installed, the architecture-appropriate MSI asset is streamed to `%LocalAppData%\Voxto\updates\`. A `.sha256` sidecar file is downloaded from the same release and used for integrity verification.
 
 **4. Integrity check** — The SHA-256 of the downloaded MSI is computed locally and compared to the sidecar. If they don't match the file is deleted and the update is aborted.
 
-**5. Apply** — When the user clicks **Restart to Update** in the tray menu, `UpdateService.ApplyUpdateAndRestart()` writes a PowerShell trampoline script to `%TEMP%`, launches it hidden, then shuts down the app. The trampoline:
+**5. Apply** — When Voxto proceeds with installation — either automatically or because you clicked **Install Update** in the tray menu — `UpdateService.ApplyUpdateAndRestart()` writes a PowerShell trampoline script to `%TEMP%`, launches it hidden, then shuts down the app. The trampoline:
 
 ```powershell
 Start-Sleep -Seconds 3
@@ -48,16 +54,17 @@ The MSI runs a silent install (`/passive` shows only a small progress bar), repl
 | Menu item | State |
 |-----------|-------|
 | `🔄  Check for Updates` | Default idle state |
-| `⬇  Downloading v{version}…` | Download in progress (disabled) |
-| `↺  Restart to Update v{version}` | Update ready — click to apply |
+| `↺  Install Update v{version}` | Update discovered — click to download, install, and restart |
+| `⬇  Downloading and installing v{version}…` | Automatic install is in progress |
 
-A pill notification appears briefly in the top-right corner when a download starts and when the update is ready.
+A pill notification appears briefly in the top-right corner when an update is discovered and while an automatic install is in progress.
 
 ## Preferences
 
 Open **Preferences → General → UPDATES**:
 
 - **Check for updates automatically** — toggle the background check on/off.
+- **Automatically download, install, and restart when an update is available** — apply new releases automatically after a scheduled check (default: off).
 - **Frequency** — Daily or Weekly (default: Weekly).
 - **Check Now** — run an immediate on-demand check.
 - **Last checked** label — shows when the last check completed.

@@ -111,7 +111,8 @@ public partial class PreferencesWindow : Window
         StartupCheck.IsChecked = StartupManager.IsEnabled();
 
         // Auto-update
-        AutoUpdateCheck.IsChecked = s.AutoUpdateEnabled;
+        AutoUpdateCheck.IsChecked       = s.AutoUpdateEnabled;
+        AutoInstallUpdateCheck.IsChecked = s.AutoDownloadInstallRestartEnabled;
 
         foreach (ComboBoxItem item in UpdateIntervalCombo.Items)
         {
@@ -186,8 +187,12 @@ public partial class PreferencesWindow : Window
         BrowseTodoBtn.IsEnabled = on;
     }
 
-    private void UpdateFrequencyRowEnabled() =>
-        UpdateFrequencyRow.IsEnabled = AutoUpdateCheck.IsChecked == true;
+    private void UpdateFrequencyRowEnabled()
+    {
+        var isEnabled = AutoUpdateCheck.IsChecked == true;
+        UpdateFrequencyRow.IsEnabled    = isEnabled;
+        AutoInstallUpdateCheck.IsEnabled = isEnabled;
+    }
 
     private void RefreshLastCheckedLabel(AppSettings s)
     {
@@ -227,6 +232,7 @@ public partial class PreferencesWindow : Window
         s.OutputFolder = _outputFolderBox.Text.Trim();
 
         s.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
+        s.AutoDownloadInstallRestartEnabled = AutoInstallUpdateCheck.IsChecked == true;
 
         if (UpdateIntervalCombo.SelectedItem is ComboBoxItem intervalItem)
         {
