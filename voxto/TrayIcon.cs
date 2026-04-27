@@ -159,7 +159,7 @@ public class TrayIcon : IDisposable
 
     private void OnPreferences(object? sender, EventArgs e)
     {
-        if (_preferencesWindowGate.TryGetExisting(out var existingWindow))
+        if (_preferencesWindowGate.TryGetExisting(out var existingWindow) && existingWindow is not null)
         {
             BringWindowToFront(existingWindow);
             return;
@@ -393,7 +393,7 @@ public class TrayIcon : IDisposable
     {
         _notificationTimer?.Stop();
         _hotkey?.Dispose();
-        if (_preferencesWindowGate.TryGetExisting(out var preferencesWindow))
+        if (_preferencesWindowGate.TryGetExisting(out var preferencesWindow) && preferencesWindow is not null)
         {
             preferencesWindow.Close();
             _preferencesWindowGate.Clear(preferencesWindow);
