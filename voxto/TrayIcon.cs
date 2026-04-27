@@ -1,5 +1,6 @@
 using System.IO;
 using System.Drawing;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows.Forms;
 using System.Windows;
 using System.Windows.Threading;
@@ -159,14 +160,9 @@ public class TrayIcon : IDisposable
 
     private void OnPreferences(object? sender, EventArgs e)
     {
-        if (_preferencesWindowGate.TryGetExisting(out var existingWindow) && existingWindow is not null)
-        {
-            BringWindowToFront(existingWindow);
-            return;
-        }
-
         var win = new PreferencesWindow(_settings, _outputManager, _updateService);
-        _preferencesWindowGate.TrySet(win);
+        if (!TryUseSingleOpenWindow(_preferencesWindowGate, win, BringWindowToFront))
+            return;
 
         try
         {
@@ -182,6 +178,20 @@ public class TrayIcon : IDisposable
         {
             _preferencesWindowGate.Clear(win);
         }
+    }
+
+    internal static bool TryUseSingleOpenWindow<T>(
+        SingleOpenWindowGate<T> windowGate,
+        T newWindow,
+        Action<T> activateExistingWindow) where T : class
+    {
+        if (windowGate.TrySet(newWindow))
+            return true;
+
+        if (windowGate.TryGetExisting(out var existingWindow))
+            activateExistingWindow(existingWindow);
+
+        return false;
     }
 
     internal static void BringWindowToFront(Window window)
@@ -408,26 +418,36 @@ public class TrayIcon : IDisposable
 
 internal sealed class SingleOpenWindowGate<T> where T : class
 {
+    private readonly object _syncRoot = new();
     private T? _currentWindow;
 
-    public bool TryGetExisting(out T? window)
+    public bool TryGetExisting([NotNullWhen(true)] out T? window)
     {
-        window = _currentWindow;
-        return window is not null;
+        lock (_syncRoot)
+        {
+            window = _currentWindow;
+            return window is not null;
+        }
     }
 
     public bool TrySet(T window)
     {
-        if (_currentWindow is not null)
-            return false;
+        lock (_syncRoot)
+        {
+            if (_currentWindow is not null)
+                return false;
 
-        _currentWindow = window;
-        return true;
+            _currentWindow = window;
+            return true;
+        }
     }
 
     public void Clear(T window)
     {
-        if (ReferenceEquals(_currentWindow, window))
-            _currentWindow = null;
+        lock (_syncRoot)
+        {
+            if (ReferenceEquals(_currentWindow, window))
+                _currentWindow = null;
+        }
     }
 }
