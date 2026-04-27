@@ -145,6 +145,26 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
+    public void PackageWxs_LaunchesVoxtoAfterFreshInstall()
+    {
+        var package = LoadXmlDocument("installer", "Package.wxs");
+        var customAction = package
+            .Descendants(WixNamespace + "CustomAction")
+            .Single(element => string.Equals(element.Attribute("Id")?.Value, "LaunchInstalledApplication", StringComparison.Ordinal));
+        var scheduledAction = package
+            .Descendants(WixNamespace + "Custom")
+            .Single(element => string.Equals(element.Attribute("Action")?.Value, "LaunchInstalledApplication", StringComparison.Ordinal));
+
+        Assert.Equal("INSTALLDIR", customAction.Attribute("Directory")?.Value);
+        Assert.Equal("voxto.exe", customAction.Attribute("ExeCommand")?.Value);
+        Assert.Equal("immediate", customAction.Attribute("Execute")?.Value);
+        Assert.Equal("asyncNoWait", customAction.Attribute("Return")?.Value);
+        Assert.Equal("yes", customAction.Attribute("Impersonate")?.Value);
+        Assert.Equal("InstallFinalize", scheduledAction.Attribute("After")?.Value);
+        Assert.Equal("NOT Installed AND NOT WIX_UPGRADE_DETECTED", scheduledAction.Value.Trim());
+    }
+
+    [Fact]
     public void PublishWorkflow_PassesCompatibleMsiVersionToInstallerBuild()
     {
         var workflowPath = Path.Combine(RepositoryRoot, ".github", "workflows", "publish.yml");

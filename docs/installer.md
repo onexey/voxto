@@ -16,7 +16,7 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 **MSI version mapping** — GitHub releases keep the full CalVer tag (`YYYY.M.D.run`), but the MSI package version uses a Windows Installer-compatible form (`YY.M.run`). This preserves upgrade ordering while staying within MSI's numeric limits.
 
-**No launch-after-install custom action** — Fresh installs are launched from the Start Menu shortcut created by the installer. Updates are handled by `UpdateService`'s PowerShell trampoline, which relaunches the app after `msiexec` finishes. This removes the need for architecture-specific WiX custom-action DLLs.
+**Launch after fresh install** — The MSI launches Voxto automatically after a successful fresh install. Upgrades intentionally skip that custom action because `UpdateService` already relaunches the app after `msiexec` finishes.
 
 ## Installer artefacts (per release)
 

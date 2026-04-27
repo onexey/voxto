@@ -20,10 +20,9 @@
     This guarantees that every Whisper native DLL lands in the installer
     without manual maintenance.
 
-  • No launch-after-install custom action is included here.  Fresh installs
-    are launched by the user from the Start Menu shortcut.  Updates are
-    triggered through the app's UpdateService, which uses its own PowerShell
-    trampoline to relaunch the new executable after msiexec finishes.
+  • Fresh installs auto-launch Voxto after InstallFinalize.  Upgrades do not,
+    because UpdateService already handles relaunch after msiexec finishes and
+    must remain the single restart path for in-app updates.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
@@ -43,6 +42,24 @@
 
     <!-- Embed all files in a single CAB for a self-contained MSI. -->
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!--
+      Launch Voxto after a successful fresh install. Exclude upgrades so the
+      app's in-product updater remains the only relaunch path for MSI updates.
+    -->
+    <CustomAction Id="LaunchInstalledApplication"
+                  Directory="INSTALLDIR"
+                  ExeCommand="voxto.exe"
+                  Execute="immediate"
+                  Return="asyncNoWait"
+                  Impersonate="yes" />
+
+    <InstallExecuteSequence>
+      <Custom Action="LaunchInstalledApplication"
+              After="InstallFinalize">
+        NOT Installed AND NOT WIX_UPGRADE_DETECTED
+      </Custom>
+    </InstallExecuteSequence>
 
     <!--
       Install to %LocalAppData%\Voxto.
@@ -69,7 +86,7 @@
     </StandardDirectory>
 
     <!--
-      Start Menu shortcut — the only entry point for fresh installs.
+      Start Menu shortcut for launching Voxto after installation.
       The RegistryValue KeyPath is required by Windows Installer; it records
       that this component is installed for the current user.
     -->
