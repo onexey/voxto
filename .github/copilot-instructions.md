@@ -52,6 +52,7 @@ voxto/
 │   ├── MarkdownFileOutputTests.cs
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
+│   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
@@ -79,9 +80,10 @@ voxto/
 
 ### 1 — Tests
 **Every change must include a corresponding unit test.**
-- New behaviour → new `[Fact]` or `[Theory]` in the relevant `*Tests.cs` file.
+- New behaviour → new `[Fact]` or `[Theory]` in the matching production-class test file (for example `SomeService.cs` → `SomeServiceTest.cs`).
 - Bug fix → add a regression test that would have caught the bug.
 - Tests live in `voxto.Tests/` and use xUnit.
+- Keep tests in the matching test class for the production type they cover instead of creating separate scenario-specific test classes.
 - Test classes that touch the file system must use a temp directory and clean up in `Dispose()`.
 - Do not use mocking frameworks; prefer simple hand-written test doubles (spy/fake/stub classes defined as private sealed nested classes inside the test class).
 
