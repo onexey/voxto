@@ -23,7 +23,14 @@
       use file key paths, so per-user publish harvesting trips ICE38 even though
       the install/update/uninstall flow itself is valid for this app.
     -->
-    <SuppressIces>ICE38</SuppressIces>
+    <!--
+      ICE64 fires for every directory under the user profile that lacks a
+      RemoveFolder entry. The auto-harvested subdirectories created by
+      <Files Include="**\*"/> (native DLL locale sub-folders, etc.) have no
+      hand-authored RemoveFolder elements, so ICE64 trips on each one.
+      Suppressing it here is the standard approach for harvested per-user installs.
+    -->
+    <SuppressIces>ICE38;ICE64</SuppressIces>
   </PropertyGroup>
 
   <ItemGroup>

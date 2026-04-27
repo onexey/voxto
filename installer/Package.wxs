@@ -55,6 +55,8 @@
           <Component Id="InstallDirCleanup"
                      Guid="{9A1D5A2B-3D88-4F7D-99F5-A96F244D6D9B}">
             <RemoveFolder Id="CleanInstallDir" On="uninstall" />
+            <!-- Also remove the parent Programs folder on uninstall (required by ICE64). -->
+            <RemoveFolder Id="CleanProgramsDir" Directory="LocalAppDataProgramsFolder" On="uninstall" />
             <RegistryValue Root="HKCU"
                            Key="Software\Voxto\Install"
                            Name="InstallDirCleanup"
