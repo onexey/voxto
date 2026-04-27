@@ -36,7 +36,7 @@ public class TodoAppendOutputTests : IDisposable
         await _output.WriteAsync(Result("Buy milk"), Settings());
 
         var line = (await File.ReadAllTextAsync(TodoFile)).TrimEnd();
-        Assert.Equal("[ ] Buy milk @25.04.2026 17:32", line);
+        Assert.Equal("- [ ] Buy milk @25.04.2026 17:32", line);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class TodoAppendOutputTests : IDisposable
         await _output.WriteAsync(Result("Some task"), Settings());
 
         var content = await File.ReadAllTextAsync(TodoFile);
-        Assert.StartsWith("[ ]", content);
+        Assert.StartsWith("- [ ]", content);
     }
 
     [Fact]
@@ -93,18 +93,40 @@ public class TodoAppendOutputTests : IDisposable
         await _output.WriteAsync(result, Settings());
 
         var line = (await File.ReadAllTextAsync(TodoFile)).TrimEnd();
-        Assert.Equal("[ ] First Second @25.04.2026 17:32", line);
+        Assert.Equal("- [ ] First Second @25.04.2026 17:32", line);
     }
 
     [Fact]
     public async Task WriteAsync_ExistingContent_IsNotOverwritten()
     {
-        await File.WriteAllTextAsync(TodoFile, $"[ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}");
+        await File.WriteAllTextAsync(TodoFile, $"- [ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}");
         await _output.WriteAsync(Result("New task"), Settings());
 
         var content = await File.ReadAllTextAsync(TodoFile);
         Assert.Contains("Pre-existing task", content);
         Assert.Contains("New task",          content);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ExistingFileWithoutTrailingNewLine_PrependsNewLineBeforeAppending()
+    {
+        await File.WriteAllTextAsync(TodoFile, "- [ ] Pre-existing task @01.01.2026 10:00");
+
+        await _output.WriteAsync(Result("New task"), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.Equal($"- [ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}- [ ] New task @25.04.2026 17:32{Environment.NewLine}", content);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ExistingFileWithTrailingNewLine_AppendsDirectly()
+    {
+        await File.WriteAllTextAsync(TodoFile, $"- [ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}");
+
+        await _output.WriteAsync(Result("New task"), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.Equal($"- [ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}- [ ] New task @25.04.2026 17:32{Environment.NewLine}", content);
     }
 
     // ── File / directory creation ─────────────────────────────────────────────
