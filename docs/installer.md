@@ -14,7 +14,7 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 **File harvesting** — `Package.wxs` uses WiX `Files Include="**"` authoring rooted at the published app directory, so every file from `dotnet publish` is picked up automatically. No manual file list is maintained; new Whisper native DLLs added by NuGet upgrades are included without extra installer edits. Because harvested components install under `%LocalAppData%`, the WiX project suppresses ICE38 and ICE64 during validation (ICE64 fires on auto-harvested locale sub-folders that have no `RemoveFolder`; per-component suppression is not available in WiX v5).
 
-**MSI version mapping** — GitHub releases keep the full CalVer tag (`YYYY.M.D.run`), but the MSI package version uses a Windows Installer-compatible form (`YY.M.run`). This preserves upgrade ordering while staying within MSI's numeric limits.
+**MSI version mapping** — GitHub releases keep the full CalVer tag (`YYYY.M.D.minor`). The `minor` component starts at `1` each UTC day and increments for additional releases on that same day. The MSI package version uses a Windows Installer-compatible form (`YY.M.(DD*1000+minor)`) so upgrade ordering still follows the release date while staying within MSI's numeric limits.
 
 **No launch-after-install custom action** — Fresh installs are launched from the Start Menu shortcut created by the installer. Updates are handled by `UpdateService`'s PowerShell trampoline, which relaunches the app after `msiexec` finishes. This removes the need for architecture-specific WiX custom-action DLLs.
 

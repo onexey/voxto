@@ -70,9 +70,9 @@ jobs:
 
   # ── 1. Compute CalVer version (runs once) ──────────────────────────────────
   #
-  # Format: YYYY.M.D.<run-number>
-  # Examples: 2026.4.25.1  /  2026.12.1.42
-  # The run-number makes same-day releases unique and strictly increasing.
+  # Format: YYYY.M.D.<minor>
+  # Examples: 2026.4.25.1  /  2026.12.1.3
+  # The minor resets to 1 each UTC day and increments for extra same-day releases.
   # ──────────────────────────────────────────────────────────────────────────
   version:
     name: Compute version
@@ -86,13 +86,47 @@ jobs:
     steps:
       - name: Compute CalVer
         id: calver
-        run: |
-          VERSION="$(date -u +'%Y.%-m.%-d').${{ github.run_number }}"
-          MSI_VERSION="$(date -u +'%y.%-m').${{ github.run_number }}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "msi_version=$MSI_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION"
-          echo "MSI version: $MSI_VERSION"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const now = new Date();
+            const year = now.getUTCFullYear();
+            const month = now.getUTCMonth() + 1;
+            const day = now.getUTCDate();
+            const datePrefix = `${year}.${month}.${day}`;
+            let nextMinor = 1;
+
+            try {
+              const latest = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              const tag = latest.data.tag_name ?? "";
+              const match = /^v?(?<year>\d{4})\.(?<month>\d{1,2})\.(?<day>\d{1,2})\.(?<minor>\d+)$/.exec(tag);
+
+              if (match?.groups) {
+                const latestPrefix =
+                  `${Number(match.groups.year)}.${Number(match.groups.month)}.${Number(match.groups.day)}`;
+
+                if (latestPrefix === datePrefix) {
+                  nextMinor = Number(match.groups.minor) + 1;
+                }
+              } else if (tag.length > 0) {
+                core.warning(`Latest release tag '${tag}' does not match the expected CalVer format; starting today's sequence at 1.`);
+              }
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            const version = `${datePrefix}.${nextMinor}`;
+            const msiVersion = `${year % 100}.${month}.${(day * 1000) + nextMinor}`;
+
+            core.setOutput("version", version);
+            core.setOutput("msi_version", msiVersion);
+            core.info(`Version: ${version}`);
+            core.info(`MSI version: ${msiVersion}`);
 
   # ── 2. Build, sign, and package for each Windows target ───────────────────
   #

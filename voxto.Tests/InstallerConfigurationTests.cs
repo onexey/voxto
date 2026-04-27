@@ -151,7 +151,12 @@ public class InstallerConfigurationTests
         var workflow     = File.ReadAllText(workflowPath);
 
         Assert.Matches(new Regex(@"^\s+msi_version:\s+\$\{\{\s*steps\.calver\.outputs\.msi_version\s*\}\}\s*$", RegexOptions.Multiline), workflow);
-        Assert.Matches(new Regex(@"^\s+MSI_VERSION=""\$\(date -u \+'%y\.%-m'\)\.\$\{\{\s*github\.run_number\s*\}\}""\s*$", RegexOptions.Multiline), workflow);
+        Assert.Contains("uses: actions/github-script@v7", workflow, StringComparison.Ordinal);
+        Assert.Contains("getLatestRelease", workflow, StringComparison.Ordinal);
+        Assert.Contains("const datePrefix = `${year}.${month}.${day}`;", workflow, StringComparison.Ordinal);
+        Assert.Contains("nextMinor = Number(match.groups.minor) + 1;", workflow, StringComparison.Ordinal);
+        Assert.Contains("const version = `${datePrefix}.${nextMinor}`;", workflow, StringComparison.Ordinal);
+        Assert.Contains("const msiVersion = `${year % 100}.${month}.${(day * 1000) + nextMinor}`;", workflow, StringComparison.Ordinal);
         Assert.Matches(new Regex(@"^\s+-p:MsiVersion=""\$msiVersion""\s*`\s*$", RegexOptions.Multiline), workflow);
     }
 }
