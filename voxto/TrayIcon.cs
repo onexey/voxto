@@ -21,6 +21,7 @@ public class TrayIcon : IDisposable
     private readonly RecorderService _recorder;
     private readonly OutputManager   _outputManager;
     private readonly UpdateService   _updateService;
+    private readonly SingleOpenWindowGate<PreferencesWindow> _preferencesWindowGate = new();
     private AppSettings _settings;
     private GlobalHotkey? _hotkey;
     private OverlayWindow? _overlay;             // persistent: recording + model download
@@ -158,14 +159,40 @@ public class TrayIcon : IDisposable
 
     private void OnPreferences(object? sender, EventArgs e)
     {
-        var win = new PreferencesWindow(_settings, _outputManager, _updateService);
-        if (win.ShowDialog() == true)
+        if (_preferencesWindowGate.TryGetExisting(out var existingWindow))
         {
-            _settings = win.Result;
-            _recorder.UpdateSettings(_settings);
-            _updateService.UpdateSettings(_settings);
-            RegisterHotkey();
+            BringWindowToFront(existingWindow);
+            return;
         }
+
+        var win = new PreferencesWindow(_settings, _outputManager, _updateService);
+        _preferencesWindowGate.TrySet(win);
+
+        try
+        {
+            if (win.ShowDialog() == true)
+            {
+                _settings = win.Result;
+                _recorder.UpdateSettings(_settings);
+                _updateService.UpdateSettings(_settings);
+                RegisterHotkey();
+            }
+        }
+        finally
+        {
+            _preferencesWindowGate.Clear(win);
+        }
+    }
+
+    internal static void BringWindowToFront(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized)
+            window.WindowState = WindowState.Normal;
+
+        window.Activate();
+        window.Topmost = true;
+        window.Topmost = false;
+        window.Focus();
     }
 
     // ── Update menu handlers ──────────────────────────────────────────────────
@@ -366,10 +393,41 @@ public class TrayIcon : IDisposable
     {
         _notificationTimer?.Stop();
         _hotkey?.Dispose();
+        if (_preferencesWindowGate.TryGetExisting(out var preferencesWindow))
+        {
+            preferencesWindow.Close();
+            _preferencesWindowGate.Clear(preferencesWindow);
+        }
         _overlay?.Close();
         _notificationOverlay?.Close();
         _notifyIcon.Dispose();
         _recorder.Dispose();
         _updateService.Dispose();
+    }
+}
+
+internal sealed class SingleOpenWindowGate<T> where T : class
+{
+    private T? _currentWindow;
+
+    public bool TryGetExisting(out T? window)
+    {
+        window = _currentWindow;
+        return window is not null;
+    }
+
+    public bool TrySet(T window)
+    {
+        if (_currentWindow is not null)
+            return false;
+
+        _currentWindow = window;
+        return true;
+    }
+
+    public void Clear(T window)
+    {
+        if (ReferenceEquals(_currentWindow, window))
+            _currentWindow = null;
     }
 }

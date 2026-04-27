@@ -52,6 +52,7 @@ voxto/
 │   ├── MarkdownFileOutputTests.cs
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
+│   ├── SingleOpenWindowGateTests.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
