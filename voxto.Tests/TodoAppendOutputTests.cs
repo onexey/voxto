@@ -129,6 +129,17 @@ public class TodoAppendOutputTests : IDisposable
         Assert.Equal($"- [ ] Pre-existing task @01.01.2026 10:00{Environment.NewLine}- [ ] New task @25.04.2026 17:32{Environment.NewLine}", content);
     }
 
+    [Fact]
+    public async Task WriteAsync_ExistingEmptyFile_DoesNotAddLeadingBlankLine()
+    {
+        await File.WriteAllTextAsync(TodoFile, string.Empty);
+
+        await _output.WriteAsync(Result("New task"), Settings());
+
+        var content = await File.ReadAllTextAsync(TodoFile);
+        Assert.Equal($"- [ ] New task @25.04.2026 17:32{Environment.NewLine}", content);
+    }
+
     // ── File / directory creation ─────────────────────────────────────────────
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 
 namespace Voxto;
 
@@ -18,24 +19,28 @@ internal sealed class TodoAppendOutput : ITranscriptionOutput
 
         var date = result.Timestamp.ToString("dd.MM.yyyy HH:mm");
         var line = $"- [ ] {result.FullText} @{date}{Environment.NewLine}";
-        var prefix = NeedsLeadingNewLine(path)
-            ? Environment.NewLine
-            : string.Empty;
+        await using var stream = new FileStream(
+            path,
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.Read,
+            bufferSize: 4096,
+            options: FileOptions.Asynchronous);
 
-        await File.AppendAllTextAsync(path, prefix + line);
-    }
+        var prefix = string.Empty;
+        if (stream.Length > 0)
+        {
+            stream.Seek(-1, SeekOrigin.End);
 
-    private static bool NeedsLeadingNewLine(string path)
-    {
-        if (!File.Exists(path))
-            return false;
+            var lastByte = new byte[1];
+            var bytesRead = await stream.ReadAsync(lastByte);
+            if (bytesRead == 1 && lastByte[0] is not ((byte)'\n' or (byte)'\r'))
+                prefix = Environment.NewLine;
+        }
 
-        using var stream = File.OpenRead(path);
-        if (stream.Length == 0)
-            return false;
+        stream.Seek(0, SeekOrigin.End);
 
-        stream.Seek(-1, SeekOrigin.End);
-        var lastByte = stream.ReadByte();
-        return lastByte is not ('\n' or '\r');
+        var content = Encoding.UTF8.GetBytes(prefix + line);
+        await stream.WriteAsync(content);
     }
 }
