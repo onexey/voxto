@@ -4,7 +4,7 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 ## Design decisions
 
-**Per-user install (`Scope="perUser"`)** — Voxto installs to `%LocalAppData%\Programs\Voxto` via `LocalAppDataFolder\Programs`. This means:
+**Per-user install (`Scope="perUser"`)** — Voxto installs to `%LocalAppData%\Voxto` directly under `LocalAppDataFolder`. This means:
 
 - No UAC elevation prompt during first install or subsequent updates.
 - The installer is suitable for environments where the user doesn't have admin rights.
@@ -12,7 +12,7 @@ Voxto ships as a per-user MSI installer built with [WiX Toolset v5](https://wixt
 
 **MajorUpgrade** — Every new version unconditionally removes the previous one before installing. Stale files (removed DLLs, renamed binaries) are always cleaned up. Downgrading is blocked with a friendly error message.
 
-**File harvesting** — `Package.wxs` uses WiX `Files Include="**"` authoring rooted at the published app directory, so every file from `dotnet publish` is picked up automatically. No manual file list is maintained; new Whisper native DLLs added by NuGet upgrades are included without extra installer edits. Because those harvested components install under `%LocalAppData%`, the WiX project suppresses ICE38 during validation.
+**File harvesting** — `Package.wxs` uses WiX `Files Include="**"` authoring rooted at the published app directory, so every file from `dotnet publish` is picked up automatically. No manual file list is maintained; new Whisper native DLLs added by NuGet upgrades are included without extra installer edits. Because harvested components install under `%LocalAppData%`, the WiX project suppresses ICE38 and ICE64 during validation (ICE64 fires on auto-harvested locale sub-folders that have no `RemoveFolder`; per-component suppression is not available in WiX v5).
 
 **MSI version mapping** — GitHub releases keep the full CalVer tag (`YYYY.M.D.run`), but the MSI package version uses a Windows Installer-compatible form (`YY.M.run`). This preserves upgrade ordering while staying within MSI's numeric limits.
 
@@ -80,7 +80,7 @@ This value must **never change**. Changing it breaks the upgrade chain: Windows 
 ## Install location
 
 ```
-%LocalAppData%\Programs\Voxto\
+%LocalAppData%\Voxto\
     voxto.exe
     ggml-*.dll          ← Whisper native libraries
     *.dll               ← .NET runtime (self-contained)
