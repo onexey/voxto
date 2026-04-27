@@ -4,7 +4,7 @@ namespace Voxto;
 
 /// <summary>
 /// Appends each transcription as a single Markdown task line to one shared file.
-/// Format: <c>[ ] text @dd.MM.yyyy HH:mm</c>
+/// Format: <c>- [ ] text @dd.MM.yyyy HH:mm</c>
 /// </summary>
 internal sealed class TodoAppendOutput : ITranscriptionOutput
 {
