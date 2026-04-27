@@ -95,23 +95,26 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
-    public void PackageWxs_UsesLocalAppDataProgramsFolderForPerUserInstall()
+    public void PackageWxs_UsesLocalAppDataFolderForPerUserInstall()
     {
         var package = LoadXmlDocument("installer", "Package.wxs");
         var localAppDataFolder = package
             .Descendants(WixNamespace + "StandardDirectory")
             .Single(element => string.Equals(element.Attribute("Id")?.Value, "LocalAppDataFolder", StringComparison.Ordinal));
 
-        var programsFolder = localAppDataFolder
-            .Elements(WixNamespace + "Directory")
-            .Single(element => string.Equals(element.Attribute("Id")?.Value, "LocalAppDataProgramsFolder", StringComparison.Ordinal));
-
-        var installDirectory = programsFolder
+        var installDirectory = localAppDataFolder
             .Elements(WixNamespace + "Directory")
             .Single(element => string.Equals(element.Attribute("Id")?.Value, "INSTALLDIR", StringComparison.Ordinal));
 
-        Assert.Equal("Programs", programsFolder.Attribute("Name")?.Value);
         Assert.Equal("Voxto", installDirectory.Attribute("Name")?.Value);
+
+        // LocalAppDataProgramsFolder must not exist — installing directly under
+        // LocalAppDataFolder avoids removing the shared %LocalAppData%\Programs
+        // directory on uninstall and eliminates the ICE64 violation for authored dirs.
+        var hasProgamsFolder = localAppDataFolder
+            .Elements(WixNamespace + "Directory")
+            .Any(element => string.Equals(element.Attribute("Id")?.Value, "LocalAppDataProgramsFolder", StringComparison.Ordinal));
+        Assert.False(hasProgamsFolder);
     }
 
     [Fact]

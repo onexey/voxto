@@ -5,7 +5,7 @@
 
   Design decisions
   ────────────────
-  • Scope="perUser"  →  installs to %LocalAppData%\Programs\Voxto with NO
+  • Scope="perUser"  →  installs to %LocalAppData%\Voxto with NO
     UAC prompt, making silent updates frictionless (msiexec /passive requires
     no elevation for per-user packages).
 
@@ -45,26 +45,26 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!--
-      Install to %LocalAppData%\Programs\Voxto.
+      Install to %LocalAppData%\Voxto.
       Using LocalAppDataFolder avoids the machine-wide Program Files location,
       which would otherwise require elevation during install and update.
+      Installing directly here (without a Programs sub-directory) means ICE64
+      is satisfied for all authored directories without touching the shared
+      %LocalAppData%\Programs folder owned by other applications.
     -->
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="LocalAppDataProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLDIR" Name="Voxto">
-          <Component Id="InstallDirCleanup"
-                     Guid="{9A1D5A2B-3D88-4F7D-99F5-A96F244D6D9B}">
-            <RemoveFolder Id="CleanInstallDir" On="uninstall" />
-            <!-- Also remove the parent Programs folder on uninstall (required by ICE64). -->
-            <RemoveFolder Id="CleanProgramsDir" Directory="LocalAppDataProgramsFolder" On="uninstall" />
-            <RegistryValue Root="HKCU"
-                           Key="Software\Voxto\Install"
-                           Name="InstallDirCleanup"
-                           Type="integer"
-                           Value="1"
-                           KeyPath="yes" />
-          </Component>
-        </Directory>
+      <Directory Id="INSTALLDIR" Name="Voxto">
+        <Component Id="InstallDirCleanup"
+                   Guid="{9A1D5A2B-3D88-4F7D-99F5-A96F244D6D9B}">
+          <!-- Remove only the app-specific install directory on uninstall. -->
+          <RemoveFolder Id="CleanInstallDir" On="uninstall" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\Voxto\Install"
+                         Name="InstallDirCleanup"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
       </Directory>
     </StandardDirectory>
 

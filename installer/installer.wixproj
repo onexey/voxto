@@ -28,7 +28,10 @@
       RemoveFolder entry. The auto-harvested subdirectories created by
       <Files Include="**\*"/> (native DLL locale sub-folders, etc.) have no
       hand-authored RemoveFolder elements, so ICE64 trips on each one.
-      Suppressing it here is the standard approach for harvested per-user installs.
+      The authored install directory (INSTALLDIR) has its own CleanInstallDir
+      RemoveFolder and does not need this suppression; it is only required for
+      the harvested content where per-component suppression is not available in
+      WiX v5.
     -->
     <SuppressIces>ICE38;ICE64</SuppressIces>
   </PropertyGroup>

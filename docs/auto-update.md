@@ -40,7 +40,7 @@ The MSI runs a silent install (`/passive` shows only a small progress bar), repl
 | HTTPS only | All GitHub API calls and asset downloads use TLS. The shared `HttpClient` sets no `AllowInsecureRedirects` override. |
 | SHA-256 verification | The MSI is verified against the `.sha256` sidecar before the installer is ever executed. A mismatch causes the file to be deleted immediately. |
 | No arbitrary code execution | `msiexec.exe` is a trusted Windows component. Only the specifically downloaded and hash-verified MSI path is passed to it — not a script or arbitrary executable. |
-| No elevation required | The MSI uses `Scope="perUser"` and installs under `%LocalAppData%\Programs\Voxto`, so `msiexec /passive` runs without a UAC prompt. |
+| No elevation required | The MSI uses `Scope="perUser"` and installs under `%LocalAppData%\Voxto`, so `msiexec /passive` runs without a UAC prompt. |
 | PowerShell script `-ExecutionPolicy Bypass` | This flag is scoped to the single trampoline invocation and does not affect the system or user execution policy. |
 
 ## Tray menu
