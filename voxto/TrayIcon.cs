@@ -199,9 +199,11 @@ public class TrayIcon : IDisposable
         if (window.WindowState == WindowState.Minimized)
             window.WindowState = WindowState.Normal;
 
+        var wasTopmost = window.Topmost;
+
         window.Activate();
         window.Topmost = true;
-        window.Topmost = false;
+        window.Topmost = wasTopmost;
         window.Focus();
     }
 
