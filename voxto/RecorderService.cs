@@ -137,8 +137,15 @@ public class RecorderService : IDisposable
         }
         finally
         {
-            if (File.Exists(wavPath))
-                File.Delete(wavPath);
+            try
+            {
+                if (File.Exists(wavPath))
+                    File.Delete(wavPath);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to delete temporary audio file {Path}", wavPath);
+            }
 
             if (string.Equals(_tempWavPath, wavPath, StringComparison.OrdinalIgnoreCase))
                 _tempWavPath = null;
