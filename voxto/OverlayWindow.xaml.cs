@@ -44,9 +44,9 @@ public partial class OverlayWindow : Window
         Top = position.Y;
     }
 
-    internal static Point CalculateBottomRightPosition(Rect workArea, double width, double height, double margin = 16)
+    internal static System.Windows.Point CalculateBottomRightPosition(Rect workArea, double width, double height, double margin = 16)
     {
-        return new Point(
+        return new System.Windows.Point(
             workArea.Right - width - margin,
             workArea.Bottom - height - margin);
     }

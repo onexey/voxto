@@ -33,6 +33,19 @@ public class OverlayWindowTests
         Assert.Equal(1184, position.Y);
     }
 
+    [Fact]
+    public void CalculateBottomRightPosition_RespectsCustomMargin()
+    {
+        var position = OverlayWindow.CalculateBottomRightPosition(
+            new Rect(0, 0, 1920, 1080),
+            width: 180,
+            height: 40,
+            margin: 24);
+
+        Assert.Equal(1716, position.X);
+        Assert.Equal(1016, position.Y);
+    }
+
     private static T RunInSta<T>(Func<T> action)
     {
         T? result = default;
