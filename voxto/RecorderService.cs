@@ -114,21 +114,16 @@ public class RecorderService : IDisposable
             return;
         }
 
-        await StopAndTranscribeFileAsync(_tempWavPath);
+        await TranscribeFileAsync(_tempWavPath, deleteAfterTranscribe: true);
     }
 
-    internal async Task StopAndTranscribeFileAsync(string wavPath)
+    internal async Task TranscribeFileAsync(string wavPath, bool deleteAfterTranscribe = false)
     {
         try
         {
-            await TranscribeAsync(wavPath);
+            var result = await TranscribeAsync(wavPath);
+            await WriteOutputsAsync(result);
             TranscriptionCompleted?.Invoke();
-        }
-        catch (AggregateException aex)
-        {
-            var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
-            Log.Error(aex, "Transcription output(s) failed: {Message}", msg);
-            TranscriptionFailed?.Invoke(msg);
         }
         catch (Exception ex)
         {
@@ -137,42 +132,43 @@ public class RecorderService : IDisposable
         }
         finally
         {
-            try
+            if (deleteAfterTranscribe)
             {
-                if (File.Exists(wavPath))
-                    File.Delete(wavPath);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Failed to delete temporary audio file {Path}", wavPath);
-            }
+                try
+                {
+                    if (File.Exists(wavPath))
+                        File.Delete(wavPath);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to delete temporary audio file {Path}", wavPath);
+                }
 
-            if (string.Equals(_tempWavPath, wavPath, StringComparison.OrdinalIgnoreCase))
-                _tempWavPath = null;
+                if (string.Equals(_tempWavPath, wavPath, StringComparison.Ordinal))
+                    _tempWavPath = null;
+            }
         }
     }
 
     // ── Transcription ────────────────────────────────────────────────────────
 
-    private async Task TranscribeAsync(string wavPath)
+    private async Task<TranscriptionResult> TranscribeAsync(string wavPath)
     {
         var segments = await _transcribeSegmentsAsync(wavPath);
         Log.Information("Transcription complete ({Segments} segments)", segments.Count);
 
-        var result = new TranscriptionResult
+        return new TranscriptionResult
         {
             Timestamp = DateTime.Now,
             Segments  = segments.ToList()
         };
-
-        await _outputManager.WriteAsync(result, _settings);
     }
 
     private async Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>> TranscribeSegmentsAsync(string wavPath)
     {
         var modelPath = await EnsureModelDownloadedAsync();
 
-        return await Task.Run(() =>
+        return await Task.Factory.StartNew(() =>
         {
             var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
 
@@ -186,7 +182,21 @@ public class RecorderService : IDisposable
 
             processor.Process(fileStream);
             return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    private async Task WriteOutputsAsync(TranscriptionResult result)
+    {
+        try
+        {
+            await _outputManager.WriteAsync(result, _settings);
+        }
+        catch (AggregateException aex)
+        {
+            var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
+            Log.Error(aex, "Transcription output(s) failed: {Message}", msg);
+            throw new InvalidOperationException(msg, aex);
+        }
     }
 
     private async Task<string> EnsureModelDownloadedAsync()

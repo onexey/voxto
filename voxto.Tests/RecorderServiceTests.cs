@@ -17,7 +17,7 @@ public sealed class RecorderServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StopAndTranscribeFileAsync_WhenTranscriptionFails_RaisesFailureAndDeletesTemporaryAudio()
+    public async Task TranscribeFileAsync_WhenTranscriptionFails_RaisesFailureAndDeletesTemporaryAudio()
     {
         var outputManager = new OutputManager(new SpyOutput());
         var service = new RecorderService(
@@ -31,7 +31,7 @@ public sealed class RecorderServiceTests : IDisposable
         service.TranscriptionFailed += error => failureMessage = error;
         service.TranscriptionCompleted += () => completed = true;
 
-        await service.StopAndTranscribeFileAsync(audioPath);
+        await service.TranscribeFileAsync(audioPath, deleteAfterTranscribe: true);
 
         Assert.Equal("Whisper exploded", failureMessage);
         Assert.False(completed);
@@ -39,7 +39,48 @@ public sealed class RecorderServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StopAndTranscribeFileAsync_AfterRecoverableFailure_AllowsNextTranscriptionToSucceed()
+    public async Task TranscribeFileAsync_ByDefault_DoesNotDeleteAudioFile()
+    {
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>(
+            [
+                (TimeSpan.Zero, TimeSpan.FromSeconds(1), "hello world")
+            ]));
+        var audioPath = CreateTempAudioFile();
+
+        await service.TranscribeFileAsync(audioPath);
+
+        Assert.True(File.Exists(audioPath));
+    }
+
+    [Fact]
+    public async Task TranscribeFileAsync_WhenOutputFails_RaisesFailureAndDoesNotComplete()
+    {
+        var service = new RecorderService(
+            new AppSettings { EnabledOutputs = ["fail"] },
+            new OutputManager(new FailingOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>(
+            [
+                (TimeSpan.Zero, TimeSpan.FromSeconds(1), "hello world")
+            ]));
+        var audioPath = CreateTempAudioFile();
+        string? failureMessage = null;
+        var completed = false;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+        service.TranscriptionCompleted += () => completed = true;
+
+        await service.TranscribeFileAsync(audioPath, deleteAfterTranscribe: true);
+
+        Assert.Contains("[fail]", failureMessage);
+        Assert.False(completed);
+        Assert.False(File.Exists(audioPath));
+    }
+
+    [Fact]
+    public async Task TranscribeFileAsync_AfterRecoverableFailure_AllowsNextTranscriptionToSucceed()
     {
         var output = new SpyOutput();
         var outputManager = new OutputManager(output);
@@ -68,8 +109,8 @@ public sealed class RecorderServiceTests : IDisposable
         service.TranscriptionFailed += failures.Add;
         service.TranscriptionCompleted += () => completedCount++;
 
-        await service.StopAndTranscribeFileAsync(firstAudioPath);
-        await service.StopAndTranscribeFileAsync(secondAudioPath);
+        await service.TranscribeFileAsync(firstAudioPath, deleteAfterTranscribe: true);
+        await service.TranscribeFileAsync(secondAudioPath, deleteAfterTranscribe: true);
 
         Assert.Equal(["temporary failure"], failures);
         Assert.Equal(1, completedCount);
@@ -102,5 +143,15 @@ public sealed class RecorderServiceTests : IDisposable
             LastResult = result;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FailingOutput : ITranscriptionOutput
+    {
+        public string Id => "fail";
+
+        public string DisplayName => "fail";
+
+        public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>
+            throw new InvalidOperationException("Output failed");
     }
 }
