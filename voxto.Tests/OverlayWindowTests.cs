@@ -65,8 +65,9 @@ public class OverlayWindowTests
 
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        thread.Join();
 
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        Assert.True(completed, "The STA test thread did not complete within 30 seconds.");
         if (capturedException is not null)
             ExceptionDispatchInfo.Capture(capturedException).Throw();
 
