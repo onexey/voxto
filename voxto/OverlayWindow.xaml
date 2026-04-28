@@ -11,6 +11,7 @@
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
         IsHitTestVisible="False"
         ContentRendered="OnContentRendered">
 

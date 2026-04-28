@@ -22,6 +22,7 @@ public partial class OverlayWindow : Window
     {
         InitializeComponent();
 
+        Opacity = 0;
         MessageText.Text = message;
 
         if (dotColor.HasValue)
@@ -29,12 +30,24 @@ public partial class OverlayWindow : Window
     }
 
     // Position after layout is complete so SizeToContent has resolved the actual width.
-    private void OnContentRendered(object sender, EventArgs e) => PositionBottomRight();
+    private void OnContentRendered(object sender, EventArgs e)
+    {
+        PositionBottomRight();
+        Opacity = 1;
+    }
 
     private void PositionBottomRight()
     {
         var screen = SystemParameters.WorkArea;
-        Left = screen.Right - ActualWidth - 16;
-        Top  = screen.Bottom - ActualHeight - 16;
+        var position = CalculateBottomRightPosition(screen, ActualWidth, ActualHeight);
+        Left = position.X;
+        Top = position.Y;
+    }
+
+    internal static Point CalculateBottomRightPosition(Rect workArea, double width, double height, double margin = 16)
+    {
+        return new Point(
+            workArea.Right - width - margin,
+            workArea.Bottom - height - margin);
     }
 }
