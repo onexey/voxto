@@ -15,6 +15,7 @@ public class RecorderService : IDisposable
 {
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
+    private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
@@ -39,9 +40,18 @@ public class RecorderService : IDisposable
 
     /// <summary>Initialises the service with the provided settings and output pipeline.</summary>
     public RecorderService(AppSettings settings, OutputManager outputManager)
+        : this(settings, outputManager, null)
+    {
+    }
+
+    internal RecorderService(
+        AppSettings settings,
+        OutputManager outputManager,
+        Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? transcribeSegmentsAsync)
     {
         _settings      = settings;
         _outputManager = outputManager;
+        _transcribeSegmentsAsync = transcribeSegmentsAsync ?? TranscribeSegmentsAsync;
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
@@ -104,16 +114,16 @@ public class RecorderService : IDisposable
             return;
         }
 
+        await TranscribeFileAsync(_tempWavPath, deleteAfterTranscribe: true);
+    }
+
+    internal async Task TranscribeFileAsync(string wavPath, bool deleteAfterTranscribe = false)
+    {
         try
         {
-            await TranscribeAsync(_tempWavPath!);
+            var result = await TranscribeAsync(wavPath);
+            await WriteOutputsAsync(result);
             TranscriptionCompleted?.Invoke();
-        }
-        catch (AggregateException aex)
-        {
-            var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
-            Log.Error(aex, "Transcription output(s) failed: {Message}", msg);
-            TranscriptionFailed?.Invoke(msg);
         }
         catch (Exception ex)
         {
@@ -122,38 +132,71 @@ public class RecorderService : IDisposable
         }
         finally
         {
-            if (_tempWavPath != null && File.Exists(_tempWavPath))
-                File.Delete(_tempWavPath);
-            _tempWavPath = null;
+            if (deleteAfterTranscribe)
+            {
+                try
+                {
+                    if (File.Exists(wavPath))
+                        File.Delete(wavPath);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to delete temporary audio file {Path}", wavPath);
+                }
+
+                if (string.Equals(_tempWavPath, wavPath, StringComparison.Ordinal))
+                    _tempWavPath = null;
+            }
         }
     }
 
     // ── Transcription ────────────────────────────────────────────────────────
 
-    private async Task TranscribeAsync(string wavPath)
+    private async Task<TranscriptionResult> TranscribeAsync(string wavPath)
+    {
+        var segments = await _transcribeSegmentsAsync(wavPath);
+        Log.Information("Transcription complete ({Segments} segments)", segments.Count);
+
+        return new TranscriptionResult
+        {
+            Timestamp = DateTime.Now,
+            Segments  = segments.ToList()
+        };
+    }
+
+    private async Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>> TranscribeSegmentsAsync(string wavPath)
     {
         var modelPath = await EnsureModelDownloadedAsync();
 
-        using var factory   = WhisperFactory.FromPath(modelPath);
-        using var processor = factory.CreateBuilder()
-            .WithLanguageDetection()
-            .Build();
-
-        var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
-
-        using var fileStream = File.OpenRead(wavPath);
-        await foreach (var seg in processor.ProcessAsync(fileStream))
-            segments.Add((seg.Start, seg.End, seg.Text.Trim()));
-
-        Log.Information("Transcription complete ({Segments} segments)", segments.Count);
-
-        var result = new TranscriptionResult
+        return await Task.Factory.StartNew(() =>
         {
-            Timestamp = DateTime.Now,
-            Segments  = segments
-        };
+            var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
 
-        await _outputManager.WriteAsync(result, _settings);
+            using var factory = WhisperFactory.FromPath(modelPath);
+            using var processor = factory.CreateBuilder()
+                .WithLanguageDetection()
+                .WithSegmentEventHandler(segment =>
+                    segments.Add((segment.Start, segment.End, segment.Text.Trim())))
+                .Build();
+            using var fileStream = File.OpenRead(wavPath);
+
+            processor.Process(fileStream);
+            return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    private async Task WriteOutputsAsync(TranscriptionResult result)
+    {
+        try
+        {
+            await _outputManager.WriteAsync(result, _settings);
+        }
+        catch (AggregateException aex)
+        {
+            var msg = string.Join("; ", aex.InnerExceptions.Select(e => e.Message));
+            Log.Error(aex, "Transcription output(s) failed: {Message}", msg);
+            throw new InvalidOperationException(msg, aex);
+        }
     }
 
     private async Task<string> EnsureModelDownloadedAsync()

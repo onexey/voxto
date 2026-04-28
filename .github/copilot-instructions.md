@@ -52,6 +52,7 @@ voxto/
 │   ├── MarkdownFileOutputTests.cs
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
+│   ├── RecorderServiceTests.cs
 │   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
