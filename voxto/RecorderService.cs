@@ -15,6 +15,7 @@ public class RecorderService : IDisposable
 {
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
+    private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
@@ -39,9 +40,18 @@ public class RecorderService : IDisposable
 
     /// <summary>Initialises the service with the provided settings and output pipeline.</summary>
     public RecorderService(AppSettings settings, OutputManager outputManager)
+        : this(settings, outputManager, null)
+    {
+    }
+
+    internal RecorderService(
+        AppSettings settings,
+        OutputManager outputManager,
+        Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? transcribeSegmentsAsync)
     {
         _settings      = settings;
         _outputManager = outputManager;
+        _transcribeSegmentsAsync = transcribeSegmentsAsync ?? TranscribeSegmentsAsync;
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
@@ -104,9 +114,14 @@ public class RecorderService : IDisposable
             return;
         }
 
+        await StopAndTranscribeFileAsync(_tempWavPath);
+    }
+
+    internal async Task StopAndTranscribeFileAsync(string wavPath)
+    {
         try
         {
-            await TranscribeAsync(_tempWavPath!);
+            await TranscribeAsync(wavPath);
             TranscriptionCompleted?.Invoke();
         }
         catch (AggregateException aex)
@@ -122,9 +137,11 @@ public class RecorderService : IDisposable
         }
         finally
         {
-            if (_tempWavPath != null && File.Exists(_tempWavPath))
-                File.Delete(_tempWavPath);
-            _tempWavPath = null;
+            if (File.Exists(wavPath))
+                File.Delete(wavPath);
+
+            if (string.Equals(_tempWavPath, wavPath, StringComparison.OrdinalIgnoreCase))
+                _tempWavPath = null;
         }
     }
 
@@ -132,28 +149,37 @@ public class RecorderService : IDisposable
 
     private async Task TranscribeAsync(string wavPath)
     {
-        var modelPath = await EnsureModelDownloadedAsync();
-
-        using var factory   = WhisperFactory.FromPath(modelPath);
-        using var processor = factory.CreateBuilder()
-            .WithLanguageDetection()
-            .Build();
-
-        var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
-
-        using var fileStream = File.OpenRead(wavPath);
-        await foreach (var seg in processor.ProcessAsync(fileStream))
-            segments.Add((seg.Start, seg.End, seg.Text.Trim()));
-
+        var segments = await _transcribeSegmentsAsync(wavPath);
         Log.Information("Transcription complete ({Segments} segments)", segments.Count);
 
         var result = new TranscriptionResult
         {
             Timestamp = DateTime.Now,
-            Segments  = segments
+            Segments  = segments.ToList()
         };
 
         await _outputManager.WriteAsync(result, _settings);
+    }
+
+    private async Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>> TranscribeSegmentsAsync(string wavPath)
+    {
+        var modelPath = await EnsureModelDownloadedAsync();
+
+        return await Task.Run(() =>
+        {
+            var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
+
+            using var factory = WhisperFactory.FromPath(modelPath);
+            using var processor = factory.CreateBuilder()
+                .WithLanguageDetection()
+                .WithSegmentEventHandler(segment =>
+                    segments.Add((segment.Start, segment.End, segment.Text.Trim())))
+                .Build();
+            using var fileStream = File.OpenRead(wavPath);
+
+            processor.Process(fileStream);
+            return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+        });
     }
 
     private async Task<string> EnsureModelDownloadedAsync()
