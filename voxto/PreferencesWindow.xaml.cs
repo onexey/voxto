@@ -51,10 +51,11 @@ public partial class PreferencesWindow : Window
     private void PopulateVersionLabel()
     {
         var ver = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = ver is not null
-            ? $"Version {ver.Major}.{ver.Minor}.{ver.Build}"
-            : "Version 1.0";
+        VersionText.Text = FormatVersionText(ver);
     }
+
+    internal static string FormatVersionText(Version? version) =>
+        version is not null ? $"Version {version}" : "Version 1.0";
 
     private void LoadSettings(AppSettings s)
     {
