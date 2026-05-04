@@ -26,8 +26,8 @@ public partial class PreferencesWindow : Window
     private TextBox   _outputFolderBox    = null!;
     private Button    _browseOutputFolder = null!;
     private UIElement _outputFolderRow    = null!;
-    private CheckBox  _cursorInsertEnterCheck = null!;
-    private UIElement _cursorInsertOptionsRow = null!;
+    private CheckBox? _cursorInsertEnterCheck;
+    private UIElement? _cursorInsertOptionsRow;
 
     /// <summary>
     /// The settings produced when the user clicks Save.
@@ -106,7 +106,7 @@ public partial class PreferencesWindow : Window
                 cb.Unchecked += (_, _) => UpdateTodoFileRowEnabled();
             }
 
-            if (output.Id == "CursorInsert")
+            if (output.Id == CursorInsertOutput.OutputId)
             {
                 _cursorInsertOptionsRow = BuildCursorInsertOptionsRow(s.CursorInsertPressEnter);
                 OutputsPanel.Children.Add(_cursorInsertOptionsRow);
@@ -213,7 +213,10 @@ public partial class PreferencesWindow : Window
 
     private void UpdateCursorInsertOptionsRowEnabled()
     {
-        var on = _outputChecks.TryGetValue("CursorInsert", out var cb) && cb.IsChecked == true;
+        if (_cursorInsertOptionsRow is null)
+            return;
+
+        var on = _outputChecks.TryGetValue(CursorInsertOutput.OutputId, out var cb) && cb.IsChecked == true;
         _cursorInsertOptionsRow.IsEnabled = on;
     }
 
@@ -260,7 +263,7 @@ public partial class PreferencesWindow : Window
 
         s.TodoFilePath = TodoFileBox.Text.Trim();
         s.OutputFolder = _outputFolderBox.Text.Trim();
-        s.CursorInsertPressEnter = _cursorInsertEnterCheck.IsChecked == true;
+        s.CursorInsertPressEnter = GetCursorInsertPressEnter(_cursorInsertEnterCheck);
 
         s.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
         s.AutoDownloadInstallRestartEnabled = AutoInstallUpdateCheck.IsChecked == true;
@@ -276,6 +279,9 @@ public partial class PreferencesWindow : Window
 
         return s;
     }
+
+    internal static bool GetCursorInsertPressEnter(CheckBox? checkBox) =>
+        checkBox?.IsChecked == true;
 
     // ── Browse dialogs ────────────────────────────────────────────────────────
 

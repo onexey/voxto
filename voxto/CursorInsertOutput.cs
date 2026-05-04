@@ -8,6 +8,8 @@ namespace Voxto;
 /// </summary>
 internal sealed class CursorInsertOutput : ITranscriptionOutput
 {
+    public const string OutputId = "CursorInsert";
+
     private readonly ICursorTextSender _textSender;
 
     public CursorInsertOutput()
@@ -17,7 +19,7 @@ internal sealed class CursorInsertOutput : ITranscriptionOutput
 
     internal CursorInsertOutput(ICursorTextSender textSender) => _textSender = textSender;
 
-    public string Id          => "CursorInsert";
+    public string Id          => OutputId;
     public string DisplayName => "Insert at cursor location";
 
     public Task WriteAsync(TranscriptionResult result, AppSettings settings)
@@ -51,7 +53,7 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
 
         var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
         if (sent != (uint)inputs.Length)
-            throw new InvalidOperationException("Failed to send text to the active cursor location.");
+            throw new InvalidOperationException(BuildFailureMessage(sent, inputs.Length, Marshal.GetLastWin32Error()));
     }
 
     internal static INPUT[] BuildInputs(string text, bool pressEnter)
@@ -73,6 +75,9 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
 
         return inputs;
     }
+
+    internal static string BuildFailureMessage(uint sent, int expected, int lastError) =>
+        $"Failed to send text to the active cursor location (sent {sent} of {expected} inputs, Win32 error {lastError}).";
 
     private static INPUT CreateUnicodeInput(char character, bool keyUp) =>
         new()

@@ -68,6 +68,18 @@ public class CursorInsertOutputTests
     [Fact]
     public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
 
+    [Fact]
+    public void Id_UsesSharedOutputIdConstant() => Assert.Equal(CursorInsertOutput.OutputId, _output.Id);
+
+    [Fact]
+    public void BuildFailureMessage_IncludesSentExpectedAndWin32Error()
+    {
+        var message = SendInputCursorTextSender.BuildFailureMessage(sent: 2, expected: 4, lastError: 5);
+
+        Assert.Contains("sent 2 of 4 inputs", message);
+        Assert.Contains("Win32 error 5", message);
+    }
+
     private static TranscriptionResult Result(string text) =>
         new()
         {
