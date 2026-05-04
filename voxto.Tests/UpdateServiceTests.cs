@@ -213,6 +213,49 @@ public class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckForUpdatesAsync_DefaultBehavior_WithAutoInstallEnabled_DownloadsAndApplies()
+    {
+        const string version = "9999.2.2.3";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version),
+            AutoDownloadInstallRestartEnabled = true
+        };
+        harness.HashResponse = $"{ComputeSha256HexFromContent(harness.DownloadPayload)}  {UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture)}";
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync();
+
+        Assert.Equal(version, service.PendingVersion);
+        Assert.NotNull(service.PendingMsiPath);
+        Assert.Equal(1, harness.DownloadCallCount);
+        Assert.Equal(1, harness.ApplyCallCount);
+        Assert.Empty(harness.FailedMessages);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_DefaultBehavior_WithAutoInstallDisabled_OnlyDiscoversUpdate()
+    {
+        const string version = "9999.2.2.4";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version),
+            AutoDownloadInstallRestartEnabled = false
+        };
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync();
+
+        Assert.Equal(version, service.PendingVersion);
+        Assert.Null(service.PendingMsiPath);
+        Assert.Equal(0, harness.DownloadCallCount);
+        Assert.Equal(0, harness.ApplyCallCount);
+        Assert.Empty(harness.FailedMessages);
+    }
+
+    [Fact]
     public async Task DownloadAndApplyPendingUpdateAsync_WithoutPendingUpdate_RaisesActionableFailureMessage()
     {
         var harness = new UpdateServiceHarness(_tempDir);
@@ -290,6 +333,7 @@ public class UpdateServiceTests : IDisposable
         public UpdateServiceHarness(string tempDir) => _tempDir = tempDir;
 
         public UpdateService.ReleaseInfo? ReleaseToReturn { get; set; }
+        public bool AutoDownloadInstallRestartEnabled { get; set; }
         public Exception? DownloadException { get; set; }
         public string DownloadPayload { get; set; } = "voxto update payload";
         public string HashResponse { get; set; } = string.Empty;
@@ -300,10 +344,10 @@ public class UpdateServiceTests : IDisposable
         public List<string> AvailableVersions { get; } = [];
         public List<string> FailedMessages { get; } = [];
 
-        public UpdateService CreateService()
+        private UpdateService CreateService(AppSettings settings)
         {
             var service = new UpdateService(
-                new AppSettings(),
+                settings,
                 FetchLatestReleaseAsync,
                 DownloadAsync,
                 GetRemoteTextAsync,
@@ -316,6 +360,16 @@ public class UpdateServiceTests : IDisposable
             service.UpdateFailed += message => FailedMessages.Add(message);
 
             return service;
+        }
+
+        public UpdateService CreateService()
+        {
+            var settings = new AppSettings
+            {
+                AutoDownloadInstallRestartEnabled = AutoDownloadInstallRestartEnabled
+            };
+
+            return CreateService(settings);
         }
 
         private Task<UpdateService.ReleaseInfo?> FetchLatestReleaseAsync(CancellationToken cancellationToken) =>

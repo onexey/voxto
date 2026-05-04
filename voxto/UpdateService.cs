@@ -193,10 +193,12 @@ public sealed class UpdateService : IDisposable
     /// Runs an immediate update check regardless of the scheduled interval.
     /// Safe to call from any thread.
     /// </summary>
-    public async Task CheckForUpdatesAsync(bool downloadAndApply = false)
+    public async Task CheckForUpdatesAsync(bool? downloadAndApply = null)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        await CheckAndDownloadAsync(cts.Token, downloadAndApply).ConfigureAwait(false);
+        await CheckAndDownloadAsync(
+            cts.Token,
+            downloadAndApply ?? _settings.AutoDownloadInstallRestartEnabled).ConfigureAwait(false);
     }
 
     /// <summary>
