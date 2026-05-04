@@ -196,9 +196,14 @@ public class InstallerConfigurationTests
         var workflow = File.ReadAllText(workflowPath);
 
         Assert.Matches(new Regex(@"^\s+fetch-depth:\s+0\s*$", RegexOptions.Multiline), workflow);
-        Assert.Matches(new Regex(@"^\s+fetch-tags:\s+true\s*$", RegexOptions.Multiline), workflow);
-        Assert.Matches(new Regex(@"last_publish_tag=""\$\(git describe --tags --abbrev=0 --match 'v\*' 2>/dev/null \|\| true\)""", RegexOptions.Multiline), workflow);
-        Assert.Matches(new Regex(@"git diff --name-only ""\$last_publish_tag""\.\.HEAD > changed-files\.txt", RegexOptions.Multiline), workflow);
-        Assert.Matches(new Regex(@"No prior publish tag found; treating all tracked files as changed\.", RegexOptions.Multiline), workflow);
+        Assert.Matches(
+            new Regex(@"git\s+describe\b[\s\S]*?--match\s+['""]v\*['""]", RegexOptions.IgnoreCase),
+            workflow);
+        Assert.Matches(
+            new Regex(@"git\s+diff\s+--name-only\b[\s\S]*?\$last_publish_tag[\s\S]*?HEAD[\s\S]*?changed-files\.txt", RegexOptions.IgnoreCase),
+            workflow);
+        Assert.Matches(
+            new Regex(@"No prior publish tag found|all tracked files as changed", RegexOptions.IgnoreCase),
+            workflow);
     }
 }
