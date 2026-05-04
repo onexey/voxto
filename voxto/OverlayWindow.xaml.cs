@@ -44,7 +44,7 @@ public partial class OverlayWindow : Window
         };
 
         var uri = new Uri(
-            $"pack://application:,,,/Assets/icons/png/{name}/voxto-{name}-32.png",
+            $"pack://application:,,,/voxto;component/Assets/icons/png/{name}/voxto-{name}-32.png",
             UriKind.Absolute);
 
         return new BitmapImage(uri);
