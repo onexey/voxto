@@ -188,4 +188,17 @@ public class InstallerConfigurationTests
         Assert.Matches(new Regex(@"^\s+MSI_VERSION=""\$\(date -u \+'%y\.%-m'\)\.\$\{\{\s*github\.run_number\s*\}\}""\s*$", RegexOptions.Multiline), workflow);
         Assert.Matches(new Regex(@"^\s+-p:MsiVersion=""\$msiVersion""\s*`\s*$", RegexOptions.Multiline), workflow);
     }
+
+    [Fact]
+    public void PublishWorkflow_DetectsChangesRelativeToLastPublishedTag()
+    {
+        var workflowPath = Path.Combine(RepositoryRoot, ".github", "workflows", "publish.yml");
+        var workflow = File.ReadAllText(workflowPath);
+
+        Assert.Matches(new Regex(@"^\s+fetch-depth:\s+0\s*$", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"^\s+fetch-tags:\s+true\s*$", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"last_publish_tag=""\$\(git describe --tags --abbrev=0 --match 'v\*' 2>/dev/null \|\| true\)""", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"git diff --name-only ""\$last_publish_tag""\.\.HEAD > changed-files\.txt", RegexOptions.Multiline), workflow);
+        Assert.Matches(new Regex(@"No prior publish tag found; treating all tracked files as changed\.", RegexOptions.Multiline), workflow);
+    }
 }
