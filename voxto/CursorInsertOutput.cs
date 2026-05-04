@@ -176,7 +176,7 @@ internal sealed class Win32KeyboardInputApi : IKeyboardInputApi
 
     public int GetLastError() => Marshal.GetLastWin32Error();
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", EntryPoint = "SendInput", SetLastError = true)]
     private static extern uint NativeSendInput(uint nInputs, SendInputCursorTextSender.INPUT[] pInputs, int cbSize);
 }
 

@@ -107,6 +107,19 @@ public class CursorInsertOutputTests
         Assert.Equal(0, clipboardPasteSender.CallCount);
     }
 
+    [Fact]
+    public void Win32KeyboardInputApi_UsesSendInputEntryPoint()
+    {
+        var method = typeof(Win32KeyboardInputApi).GetMethod(
+            "NativeSendInput",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        var attribute = Assert.Single(method!.GetCustomAttributes(typeof(System.Runtime.InteropServices.DllImportAttribute), inherit: false));
+        var dllImport = Assert.IsType<System.Runtime.InteropServices.DllImportAttribute>(attribute);
+
+        Assert.Equal("SendInput", dllImport.EntryPoint);
+    }
+
     private static TranscriptionResult Result(string text) =>
         new()
         {
