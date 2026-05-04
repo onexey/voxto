@@ -1,4 +1,5 @@
 using System.IO;
+using NAudio.Wave;
 using Voxto;
 using Xunit;
 
@@ -120,6 +121,59 @@ public sealed class RecorderServiceTests : IDisposable
         Assert.False(File.Exists(secondAudioPath));
     }
 
+    [Fact]
+    public async Task StopAndTranscribeAsync_WaitsForRecordingStoppedBeforeDisposingRecorder()
+    {
+        var recorder = new FakeAudioRecorder();
+        var output = new SpyOutput();
+        var service = new RecorderService(
+            new AppSettings { EnabledOutputs = ["spy"] },
+            new OutputManager(output),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>(
+            [
+                (TimeSpan.Zero, TimeSpan.FromSeconds(1), "hello world")
+            ]),
+            () => recorder);
+
+        await service.StartRecordingAsync();
+
+        var stopTask = service.StopAndTranscribeAsync();
+
+        Assert.Equal(1, recorder.StopRecordingCallCount);
+        Assert.False(stopTask.IsCompleted);
+        Assert.False(recorder.IsDisposed);
+
+        recorder.RaiseRecordingStopped();
+        await stopTask;
+
+        Assert.True(recorder.IsDisposed);
+        Assert.Equal(1, output.CallCount);
+        Assert.False(recorder.WasDisposedBeforeRecordingStopped);
+    }
+
+    [Fact]
+    public async Task StartRecordingAsync_WhenRecordingStopsUnexpectedly_RaisesFailureAndCleansUp()
+    {
+        var recorder = new FakeAudioRecorder();
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]),
+            () => recorder);
+        string? failureMessage = null;
+        var completed = false;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+        service.TranscriptionCompleted += () => completed = true;
+
+        await service.StartRecordingAsync();
+        recorder.RaiseRecordingStopped(new InvalidOperationException("waveInPrepareHeader failed"));
+
+        Assert.Equal("waveInPrepareHeader failed", failureMessage);
+        Assert.False(completed);
+        Assert.True(recorder.IsDisposed);
+    }
+
     private string CreateTempAudioFile()
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.wav");
@@ -153,5 +207,40 @@ public sealed class RecorderServiceTests : IDisposable
 
         public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>
             throw new InvalidOperationException("Output failed");
+    }
+
+    private sealed class FakeAudioRecorder : IAudioRecorder
+    {
+        public WaveFormat WaveFormat { get; } = new(16000, 1);
+
+        public event EventHandler<WaveInEventArgs>? DataAvailable;
+
+        public event EventHandler<StoppedEventArgs>? RecordingStopped;
+
+        public bool IsDisposed { get; private set; }
+
+        public bool HasRaisedRecordingStopped { get; private set; }
+
+        public bool WasDisposedBeforeRecordingStopped { get; private set; }
+
+        public int StopRecordingCallCount { get; private set; }
+
+        public void StartRecording()
+        {
+        }
+
+        public void StopRecording() => StopRecordingCallCount++;
+
+        public void Dispose()
+        {
+            WasDisposedBeforeRecordingStopped = !HasRaisedRecordingStopped;
+            IsDisposed = true;
+        }
+
+        public void RaiseRecordingStopped(Exception? exception = null)
+        {
+            HasRaisedRecordingStopped = true;
+            RecordingStopped?.Invoke(this, new StoppedEventArgs(exception));
+        }
     }
 }

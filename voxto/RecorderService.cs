@@ -17,13 +17,15 @@ public class RecorderService : IDisposable
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
+    private readonly Func<IAudioRecorder> _audioRecorderFactory;
     private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
     private readonly object _transcriptionSync = new();
 
-    private WaveInEvent? _waveIn;
+    private IAudioRecorder? _waveIn;
     private WaveFileWriter? _waveWriter;
     private string? _tempWavPath;
     private bool _isRecording;
+    private TaskCompletionSource<StoppedEventArgs>? _recordingStoppedSource;
 
     /// <summary>Raised when all enabled outputs have been written successfully.</summary>
     public event Action? TranscriptionCompleted;
@@ -43,18 +45,20 @@ public class RecorderService : IDisposable
 
     /// <summary>Initialises the service with the provided settings and output pipeline.</summary>
     public RecorderService(AppSettings settings, OutputManager outputManager)
-        : this(settings, outputManager, null)
+        : this(settings, outputManager, null, null)
     {
     }
 
     internal RecorderService(
         AppSettings settings,
         OutputManager outputManager,
-        Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? transcribeSegmentsAsync)
+        Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? transcribeSegmentsAsync,
+        Func<IAudioRecorder>? audioRecorderFactory = null)
     {
         _settings      = settings;
         _outputManager = outputManager;
         _transcribeSegmentsAsync = transcribeSegmentsAsync ?? TranscribeSegmentsAsync;
+        _audioRecorderFactory = audioRecorderFactory ?? CreateAudioRecorder;
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
@@ -71,21 +75,23 @@ public class RecorderService : IDisposable
         if (_isRecording)
             return Task.CompletedTask;
 
-        _isRecording = true;
-
         _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
+        _recordingStoppedSource = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _waveIn = new WaveInEvent
+        try
         {
-            WaveFormat = new WaveFormat(16000, 1), // Whisper expects 16 kHz mono
-            BufferMilliseconds = 50
-        };
-
-        _waveWriter = new WaveFileWriter(_tempWavPath, _waveIn.WaveFormat);
-        _waveIn.DataAvailable += (_, e) =>
-            _waveWriter?.Write(e.Buffer, 0, e.BytesRecorded);
-
-        _waveIn.StartRecording();
+            _waveIn = _audioRecorderFactory();
+            _waveWriter = new WaveFileWriter(_tempWavPath, _waveIn.WaveFormat);
+            _waveIn.DataAvailable += OnDataAvailable;
+            _waveIn.RecordingStopped += OnRecordingStopped;
+            _waveIn.StartRecording();
+            _isRecording = true;
+        }
+        catch (Exception ex)
+        {
+            HandleRecordingFailure(ex, deleteTempFile: true, "Failed to start recording");
+            return Task.CompletedTask;
+        }
 
         Log.Information("Recording started (model={Model})", _settings.ModelType);
         return Task.CompletedTask;
@@ -99,14 +105,26 @@ public class RecorderService : IDisposable
     {
         _isRecording = false;
 
-        // StopRecording() is synchronous — no DataAvailable events fire after it returns.
-        _waveIn?.StopRecording();
-        _waveIn?.Dispose();
-        _waveIn = null;
+        var stoppedTask = _recordingStoppedSource?.Task;
 
-        _waveWriter?.Flush();
-        _waveWriter?.Dispose();
-        _waveWriter = null;
+        try
+        {
+            _waveIn?.StopRecording();
+        }
+        catch (Exception ex)
+        {
+            HandleRecordingFailure(ex, deleteTempFile: true, "Failed to stop recording");
+            return;
+        }
+
+        if (stoppedTask is not null)
+        {
+            var stoppedArgs = await stoppedTask;
+            if (stoppedArgs.Exception is not null)
+                return;
+        }
+
+        CleanupRecordingResources(deleteTempFile: false);
 
         Log.Information("Recording stopped — starting transcription");
 
@@ -261,7 +279,124 @@ public class RecorderService : IDisposable
     public void Dispose()
     {
         _whisperFactoryCache.Dispose();
-        _waveIn?.Dispose();
-        _waveWriter?.Dispose();
+        CleanupRecordingResources(deleteTempFile: true);
     }
+
+    private static IAudioRecorder CreateAudioRecorder() =>
+        new WaveInEventRecorder(
+            new WaveInEvent
+            {
+                WaveFormat = new WaveFormat(16000, 1), // Whisper expects 16 kHz mono
+                BufferMilliseconds = 50
+            });
+
+    private void OnDataAvailable(object? sender, WaveInEventArgs e)
+    {
+        try
+        {
+            _waveWriter?.Write(e.Buffer, 0, e.BytesRecorded);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to persist captured audio");
+            throw;
+        }
+    }
+
+    private void OnRecordingStopped(object? sender, StoppedEventArgs e)
+    {
+        _recordingStoppedSource?.TrySetResult(e);
+
+        if (e.Exception is null)
+            return;
+
+        HandleRecordingFailure(e.Exception, deleteTempFile: true, "Recording stopped unexpectedly");
+    }
+
+    private void HandleRecordingFailure(Exception ex, bool deleteTempFile, string message)
+    {
+        Log.Error(ex, "{Message}", message);
+        _isRecording = false;
+        CleanupRecordingResources(deleteTempFile);
+        TranscriptionFailed?.Invoke(ex.Message);
+    }
+
+    private void CleanupRecordingResources(bool deleteTempFile)
+    {
+        if (_waveIn is not null)
+        {
+            _waveIn.DataAvailable -= OnDataAvailable;
+            _waveIn.RecordingStopped -= OnRecordingStopped;
+        }
+
+        try
+        {
+            _waveWriter?.Flush();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to flush recorded audio");
+        }
+
+        _waveWriter?.Dispose();
+        _waveWriter = null;
+        _waveIn?.Dispose();
+        _waveIn = null;
+        _recordingStoppedSource = null;
+
+        if (deleteTempFile)
+            DeleteTemporaryAudioFile();
+    }
+
+    private void DeleteTemporaryAudioFile()
+    {
+        if (_tempWavPath is null)
+            return;
+
+        try
+        {
+            if (File.Exists(_tempWavPath))
+                File.Delete(_tempWavPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to delete temporary audio file {Path}", _tempWavPath);
+        }
+        finally
+        {
+            _tempWavPath = null;
+        }
+    }
+}
+
+internal interface IAudioRecorder : IDisposable
+{
+    WaveFormat WaveFormat { get; }
+    event EventHandler<WaveInEventArgs>? DataAvailable;
+    event EventHandler<StoppedEventArgs>? RecordingStopped;
+    void StartRecording();
+    void StopRecording();
+}
+
+internal sealed class WaveInEventRecorder(WaveInEvent waveIn) : IAudioRecorder
+{
+    public WaveFormat WaveFormat => waveIn.WaveFormat;
+
+    public event EventHandler<WaveInEventArgs>? DataAvailable
+    {
+        add => waveIn.DataAvailable += value;
+        remove => waveIn.DataAvailable -= value;
+    }
+
+    public event EventHandler<StoppedEventArgs>? RecordingStopped
+    {
+        add => waveIn.RecordingStopped += value;
+        remove => waveIn.RecordingStopped -= value;
+    }
+
+    public void StartRecording() => waveIn.StartRecording();
+
+    public void StopRecording() => waveIn.StopRecording();
+
+    public void Dispose() => waveIn.Dispose();
 }
