@@ -435,9 +435,12 @@ public class TrayIcon : IDisposable
 
     private void OnTranscriptionFailed(string error)
     {
-        Log.Error("Transcription failed: {Error}", error);
+        Log.Error("Voxto operation failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
+            _isRecording = false;
+            _overlay?.Close();
+            _overlay = null;
             SetState();
             ShowNotificationPill($"Failed: {error}", AppState.Recording, durationMs: 4000);
         });
