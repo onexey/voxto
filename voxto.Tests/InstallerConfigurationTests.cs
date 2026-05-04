@@ -145,7 +145,7 @@ public class InstallerConfigurationTests
     }
 
     [Fact]
-    public void PackageWxs_ShowsOptionalLaunchCheckboxForFreshInstall_DefaultsOff()
+    public void PackageWxs_ShowsOptionalLaunchCheckboxForInteractiveInstalls_DefaultsOff()
     {
         var package = LoadXmlDocument("installer", "Package.wxs");
         var wixUi = package
@@ -175,7 +175,7 @@ public class InstallerConfigurationTests
         Assert.Equal("ExitDialog", publish.Attribute("Dialog")?.Value);
         Assert.Equal("Finish", publish.Attribute("Control")?.Value);
         Assert.Equal("DoAction", publish.Attribute("Event")?.Value);
-        Assert.Equal("WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed AND NOT WIX_UPGRADE_DETECTED", publish.Attribute("Condition")?.Value);
+        Assert.Equal("WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT REMOVE", publish.Attribute("Condition")?.Value);
     }
 
     [Fact]
