@@ -4,7 +4,7 @@ namespace Voxto;
 /// The three runtime states the app can be in.
 /// Used to select the correct brand icon across the tray indicator and overlay bubble.
 /// </summary>
-internal enum AppState
+public enum AppState
 {
     /// <summary>Idle — ready to record. Maps to the green bubble icon.</summary>
     Ready,
