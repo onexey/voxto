@@ -35,6 +35,7 @@ voxto/
 │   ├── TodoAppendOutput.cs   # appends [ ] task line to a single .md file
 │   ├── TranscriptionResult.cs
 │   ├── AppSettings.cs        # JSON settings in %LocalAppData%\Voxto\settings.json
+│   ├── DisposableResourceCache.cs # reusable keyed cache for disposable resources
 │   ├── MarkdownFormatter.cs  # pure formatting helper (no I/O)
 │   ├── GlobalHotkey.cs       # Win32 hotkey + low-level keyboard hook
 │   ├── OverlayWindow.xaml/.cs # always-on-top pill notification
@@ -53,12 +54,14 @@ voxto/
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
 │   ├── OverlayWindowTests.cs
+│   ├── DisposableResourceCacheTests.cs
 │   ├── RecorderServiceTests.cs
 │   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
-│   └── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
+│   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
+│   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
 │   ├── dependabot.yml

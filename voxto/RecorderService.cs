@@ -3,6 +3,7 @@ using NAudio.Wave;
 using Serilog;
 using Whisper.net;
 using Whisper.net.Ggml;
+using Whisper.net.LibraryLoader;
 
 namespace Voxto;
 
@@ -16,6 +17,8 @@ public class RecorderService : IDisposable
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
+    private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
+    private readonly object _transcriptionSync = new();
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
@@ -170,19 +173,31 @@ public class RecorderService : IDisposable
 
         return await Task.Factory.StartNew(() =>
         {
-            var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
+            lock (_transcriptionSync)
+            {
+                var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
 
-            using var factory = WhisperFactory.FromPath(modelPath);
-            using var processor = factory.CreateBuilder()
-                .WithLanguageDetection()
-                .WithSegmentEventHandler(segment =>
-                    segments.Add((segment.Start, segment.End, segment.Text.Trim())))
-                .Build();
-            using var fileStream = File.OpenRead(wavPath);
+                var factory = _whisperFactoryCache.GetOrCreate(modelPath, CreateWhisperFactory);
+                using var processor = factory.CreateBuilder()
+                    .WithLanguageDetection()
+                    .WithSegmentEventHandler(segment =>
+                        segments.Add((segment.Start, segment.End, segment.Text.Trim())))
+                    .Build();
+                using var fileStream = File.OpenRead(wavPath);
 
-            processor.Process(fileStream);
-            return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+                processor.Process(fileStream);
+                return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+            }
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    private static WhisperFactory CreateWhisperFactory(string modelPath)
+    {
+        var factory = WhisperFactory.FromPath(modelPath);
+        Log.Information(
+            "Whisper runtime initialized ({Runtime})",
+            RuntimeOptions.LoadedLibrary?.ToString() ?? "unknown");
+        return factory;
     }
 
     private async Task WriteOutputsAsync(TranscriptionResult result)
@@ -245,6 +260,7 @@ public class RecorderService : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        _whisperFactoryCache.Dispose();
         _waveIn?.Dispose();
         _waveWriter?.Dispose();
     }
