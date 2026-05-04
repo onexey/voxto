@@ -242,5 +242,8 @@ public sealed class RecorderServiceTests : IDisposable
             HasRaisedRecordingStopped = true;
             RecordingStopped?.Invoke(this, new StoppedEventArgs(exception));
         }
+
+        public void RaiseDataAvailable(byte[] buffer) =>
+            DataAvailable?.Invoke(this, new WaveInEventArgs(buffer, buffer.Length));
     }
 }
