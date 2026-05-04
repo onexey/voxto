@@ -22,16 +22,14 @@ public class PreferencesWindowTests
     }
 
     [Fact]
-    public void GetCursorInsertPressEnter_NullCheckBox_ReturnsFalse()
+    public void GetCursorInsertPressEnter_NullValue_ReturnsFalse()
     {
         Assert.False(PreferencesWindow.GetCursorInsertPressEnter(null));
     }
 
     [Fact]
-    public void GetCursorInsertPressEnter_CheckedCheckBox_ReturnsTrue()
+    public void GetCursorInsertPressEnter_TrueValue_ReturnsTrue()
     {
-        var checkBox = new System.Windows.Controls.CheckBox { IsChecked = true };
-
-        Assert.True(PreferencesWindow.GetCursorInsertPressEnter(checkBox));
+        Assert.True(PreferencesWindow.GetCursorInsertPressEnter(true));
     }
 }

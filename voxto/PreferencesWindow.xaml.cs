@@ -263,7 +263,7 @@ public partial class PreferencesWindow : Window
 
         s.TodoFilePath = TodoFileBox.Text.Trim();
         s.OutputFolder = _outputFolderBox.Text.Trim();
-        s.CursorInsertPressEnter = GetCursorInsertPressEnter(_cursorInsertEnterCheck);
+        s.CursorInsertPressEnter = GetCursorInsertPressEnter(_cursorInsertEnterCheck?.IsChecked);
 
         s.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
         s.AutoDownloadInstallRestartEnabled = AutoInstallUpdateCheck.IsChecked == true;
@@ -280,8 +280,8 @@ public partial class PreferencesWindow : Window
         return s;
     }
 
-    internal static bool GetCursorInsertPressEnter(CheckBox? checkBox) =>
-        checkBox?.IsChecked == true;
+    internal static bool GetCursorInsertPressEnter(bool? isChecked) =>
+        isChecked == true;
 
     // ── Browse dialogs ────────────────────────────────────────────────────────
 
