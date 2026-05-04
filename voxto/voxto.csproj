@@ -9,6 +9,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Application icon (exe + taskbar) -->
+    <ApplicationIcon>Assets\icons\voxto.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +33,27 @@
     <PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime.OpenVino" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
+  </ItemGroup>
+
+  <!-- ── Icon pack ─────────────────────────────────────────────────────────── -->
+  <!-- .ico is also picked up by <ApplicationIcon> above; listed here so MSBuild
+       tracks it as content and the build fails loudly if the file goes missing. -->
+  <ItemGroup>
+    <Resource Include="Assets\icons\voxto.ico" />
+    <!-- 16-px PNGs used for the tray indicator (one per state) -->
+    <Resource Include="Assets\icons\png\ready\voxto-ready-16.png" />
+    <Resource Include="Assets\icons\png\recording\voxto-recording-16.png" />
+    <Resource Include="Assets\icons\png\transcribing\voxto-transcribing-16.png" />
+    <!-- 32-px PNGs used for the overlay bubble state icon -->
+    <Resource Include="Assets\icons\png\ready\voxto-ready-32.png" />
+    <Resource Include="Assets\icons\png\recording\voxto-recording-32.png" />
+    <Resource Include="Assets\icons\png\transcribing\voxto-transcribing-32.png" />
+    <!-- Source SVGs kept in the repo for reference / future tooling -->
+    <None Include="Assets\icons\master\**\*" />
+    <None Include="Assets\icons\tray-16\**\*" />
+    <None Include="Assets\icons\animated\**\*" />
+    <None Include="Assets\icons\README.md" />
+    <None Include="Assets\icons\SPEC.md" />
   </ItemGroup>
 
 </Project>
