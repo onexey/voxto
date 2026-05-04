@@ -18,6 +18,7 @@ public class RecorderService : IDisposable
     private readonly OutputManager _outputManager;
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
     private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
+    private readonly object _transcriptionSync = new();
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
@@ -172,18 +173,21 @@ public class RecorderService : IDisposable
 
         return await Task.Factory.StartNew(() =>
         {
-            var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
+            lock (_transcriptionSync)
+            {
+                var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
 
-            var factory = _whisperFactoryCache.GetOrCreate(modelPath, CreateWhisperFactory);
-            using var processor = factory.CreateBuilder()
-                .WithLanguageDetection()
-                .WithSegmentEventHandler(segment =>
-                    segments.Add((segment.Start, segment.End, segment.Text.Trim())))
-                .Build();
-            using var fileStream = File.OpenRead(wavPath);
+                var factory = _whisperFactoryCache.GetOrCreate(modelPath, CreateWhisperFactory);
+                using var processor = factory.CreateBuilder()
+                    .WithLanguageDetection()
+                    .WithSegmentEventHandler(segment =>
+                        segments.Add((segment.Start, segment.End, segment.Text.Trim())))
+                    .Build();
+                using var fileStream = File.OpenRead(wavPath);
 
-            processor.Process(fileStream);
-            return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+                processor.Process(fileStream);
+                return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
+            }
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
@@ -260,39 +264,4 @@ public class RecorderService : IDisposable
         _waveIn?.Dispose();
         _waveWriter?.Dispose();
     }
-}
-
-internal sealed class DisposableResourceCache<T> : IDisposable where T : class, IDisposable
-{
-    private readonly object _syncRoot = new();
-    private string? _key;
-    private T? _resource;
-
-    public T GetOrCreate(string key, Func<string, T> create)
-    {
-        lock (_syncRoot)
-        {
-            if (_resource is not null && string.Equals(_key, key, StringComparison.Ordinal))
-                return _resource;
-
-            _resource?.Dispose();
-            _resource = null;
-            _key = null;
-            _resource = create(key);
-            _key = key;
-            return _resource;
-        }
-    }
-
-    public void Clear()
-    {
-        lock (_syncRoot)
-        {
-            _resource?.Dispose();
-            _resource = null;
-            _key = null;
-        }
-    }
-
-    public void Dispose() => Clear();
 }

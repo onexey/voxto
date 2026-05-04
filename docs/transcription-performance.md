@@ -8,6 +8,8 @@ Windows builds now also ship additional Whisper runtimes so inference can accele
 - **Vulkan** for supported Windows x64 GPUs
 - **OpenVINO** for supported Intel hardware
 
+Voxto does not call these runtime packages directly in C#. They add native runtime assets that Whisper.net probes automatically when `WhisperFactory` is created.
+
 Whisper.net already uses the machine's available hardware threads by default, so no extra multi-core setting is required in Voxto.
 
 If the required GPU/runtime dependencies are not available on the machine, Whisper falls back to the CPU runtime automatically.
