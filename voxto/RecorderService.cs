@@ -3,6 +3,7 @@ using NAudio.Wave;
 using Serilog;
 using Whisper.net;
 using Whisper.net.Ggml;
+using Whisper.net.LibraryLoader;
 
 namespace Voxto;
 
@@ -16,6 +17,7 @@ public class RecorderService : IDisposable
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
+    private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
 
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _waveWriter;
@@ -55,7 +57,13 @@ public class RecorderService : IDisposable
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
-    public void UpdateSettings(AppSettings settings) => _settings = settings;
+    public void UpdateSettings(AppSettings settings)
+    {
+        if (!string.Equals(_settings.ModelType, settings.ModelType, StringComparison.Ordinal))
+            _whisperFactoryCache.Clear();
+
+        _settings = settings;
+    }
 
     // ── Recording ────────────────────────────────────────────────────────────
 
@@ -172,7 +180,7 @@ public class RecorderService : IDisposable
         {
             var segments = new List<(TimeSpan Start, TimeSpan End, string Text)>();
 
-            using var factory = WhisperFactory.FromPath(modelPath);
+            var factory = _whisperFactoryCache.GetOrCreate(modelPath, CreateWhisperFactory);
             using var processor = factory.CreateBuilder()
                 .WithLanguageDetection()
                 .WithSegmentEventHandler(segment =>
@@ -183,6 +191,15 @@ public class RecorderService : IDisposable
             processor.Process(fileStream);
             return (IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>)segments;
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    private static WhisperFactory CreateWhisperFactory(string modelPath)
+    {
+        var factory = WhisperFactory.FromPath(modelPath);
+        Log.Information(
+            "Whisper runtime initialized ({Runtime})",
+            RuntimeOptions.LoadedLibrary?.ToString() ?? "unknown");
+        return factory;
     }
 
     private async Task WriteOutputsAsync(TranscriptionResult result)
@@ -245,7 +262,41 @@ public class RecorderService : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        _whisperFactoryCache.Dispose();
         _waveIn?.Dispose();
         _waveWriter?.Dispose();
     }
+}
+
+internal sealed class DisposableResourceCache<T> : IDisposable where T : class, IDisposable
+{
+    private readonly object _syncRoot = new();
+    private string? _key;
+    private T? _resource;
+
+    public T GetOrCreate(string key, Func<string, T> create)
+    {
+        lock (_syncRoot)
+        {
+            if (_resource is not null && string.Equals(_key, key, StringComparison.Ordinal))
+                return _resource;
+
+            _resource?.Dispose();
+            _resource = create(key);
+            _key = key;
+            return _resource;
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_syncRoot)
+        {
+            _resource?.Dispose();
+            _resource = null;
+            _key = null;
+        }
+    }
+
+    public void Dispose() => Clear();
 }

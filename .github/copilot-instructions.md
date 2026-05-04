@@ -58,7 +58,8 @@ voxto/
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
-│   └── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
+│   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
+│   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
 │   ├── dependabot.yml
