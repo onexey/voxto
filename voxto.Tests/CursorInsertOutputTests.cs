@@ -80,6 +80,33 @@ public class CursorInsertOutputTests
         Assert.Contains("Win32 error 5", message);
     }
 
+    [Fact]
+    public void Send_WhenSendInputReturnsInvalidParameter_FallsBackToClipboardPaste()
+    {
+        var keyboardInputApi = new FakeKeyboardInputApi(sent: 0, lastError: 87);
+        var clipboardPasteSender = new FakeClipboardPasteSender();
+        var sender = new SendInputCursorTextSender(keyboardInputApi, clipboardPasteSender);
+
+        sender.Send("Paste this", pressEnter: true);
+
+        Assert.Equal("Paste this", clipboardPasteSender.LastText);
+        Assert.True(clipboardPasteSender.LastPressEnter);
+        Assert.Equal(1, clipboardPasteSender.CallCount);
+    }
+
+    [Fact]
+    public void Send_WhenSendInputFailsForAnotherReason_Throws()
+    {
+        var keyboardInputApi = new FakeKeyboardInputApi(sent: 0, lastError: 5);
+        var clipboardPasteSender = new FakeClipboardPasteSender();
+        var sender = new SendInputCursorTextSender(keyboardInputApi, clipboardPasteSender);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => sender.Send("Paste this", pressEnter: false));
+
+        Assert.Contains("Win32 error 5", exception.Message);
+        Assert.Equal(0, clipboardPasteSender.CallCount);
+    }
+
     private static TranscriptionResult Result(string text) =>
         new()
         {
@@ -94,6 +121,27 @@ public class CursorInsertOutputTests
         public bool LastPressEnter { get; private set; }
 
         public void Send(string text, bool pressEnter)
+        {
+            CallCount++;
+            LastText = text;
+            LastPressEnter = pressEnter;
+        }
+    }
+
+    private sealed class FakeKeyboardInputApi(uint sent, int lastError) : IKeyboardInputApi
+    {
+        public uint SendInput(uint nInputs, SendInputCursorTextSender.INPUT[] pInputs, int cbSize) => sent;
+
+        public int GetLastError() => lastError;
+    }
+
+    private sealed class FakeClipboardPasteSender : IClipboardPasteSender
+    {
+        public int CallCount { get; private set; }
+        public string? LastText { get; private set; }
+        public bool LastPressEnter { get; private set; }
+
+        public void Paste(string text, bool pressEnter)
         {
             CallCount++;
             LastText = text;

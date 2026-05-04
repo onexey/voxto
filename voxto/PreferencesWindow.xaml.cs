@@ -61,6 +61,8 @@ public partial class PreferencesWindow : Window
 
     private void LoadSettings(AppSettings s)
     {
+        MoveTodoFileRowIntoOutputsPanel();
+
         // Model
         foreach (ComboBoxItem item in ModelCombo.Items)
         {
@@ -104,6 +106,7 @@ public partial class PreferencesWindow : Window
             {
                 cb.Checked   += (_, _) => UpdateTodoFileRowEnabled();
                 cb.Unchecked += (_, _) => UpdateTodoFileRowEnabled();
+                OutputsPanel.Children.Add(TodoFileRow);
             }
 
             if (output.Id == CursorInsertOutput.OutputId)
@@ -194,6 +197,12 @@ public partial class PreferencesWindow : Window
         };
 
         return _cursorInsertEnterCheck;
+    }
+
+    private void MoveTodoFileRowIntoOutputsPanel()
+    {
+        if (TodoFileRow.Parent is System.Windows.Controls.Panel parent)
+            parent.Children.Remove(TodoFileRow);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

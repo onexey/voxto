@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Voxto;
 
@@ -40,10 +42,25 @@ internal interface ICursorTextSender
 
 internal sealed class SendInputCursorTextSender : ICursorTextSender
 {
+    private const int ErrorInvalidParameter = 87;
     private const uint InputKeyboard = 1;
     private const uint KeyeventfKeyUp = 0x0002;
     private const uint KeyeventfUnicode = 0x0004;
     private const ushort VirtualKeyEnter = 0x0D;
+
+    private readonly IKeyboardInputApi _keyboardInputApi;
+    private readonly IClipboardPasteSender _clipboardPasteSender;
+
+    public SendInputCursorTextSender()
+        : this(new Win32KeyboardInputApi(), new ClipboardPasteSender())
+    {
+    }
+
+    internal SendInputCursorTextSender(IKeyboardInputApi keyboardInputApi, IClipboardPasteSender clipboardPasteSender)
+    {
+        _keyboardInputApi    = keyboardInputApi;
+        _clipboardPasteSender = clipboardPasteSender;
+    }
 
     public void Send(string text, bool pressEnter)
     {
@@ -51,9 +68,18 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
         if (inputs.Length == 0)
             return;
 
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-        if (sent != (uint)inputs.Length)
-            throw new InvalidOperationException(BuildFailureMessage(sent, inputs.Length, Marshal.GetLastWin32Error()));
+        var sent = _keyboardInputApi.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        if (sent == (uint)inputs.Length)
+            return;
+
+        var lastError = _keyboardInputApi.GetLastError();
+        if (ShouldUseClipboardFallback(sent, inputs.Length, lastError))
+        {
+            _clipboardPasteSender.Paste(text, pressEnter);
+            return;
+        }
+
+        throw new InvalidOperationException(BuildFailureMessage(sent, inputs.Length, lastError));
     }
 
     internal static INPUT[] BuildInputs(string text, bool pressEnter)
@@ -78,6 +104,9 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
 
     internal static string BuildFailureMessage(uint sent, int expected, int lastError) =>
         $"Failed to send text to the active cursor location (sent {sent} of {expected} inputs, Win32 error {lastError}).";
+
+    internal static bool ShouldUseClipboardFallback(uint sent, int expected, int lastError) =>
+        sent == 0 && expected > 0 && lastError == ErrorInvalidParameter;
 
     private static INPUT CreateUnicodeInput(char character, bool keyUp) =>
         new()
@@ -109,9 +138,6 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
             }
         };
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
     [StructLayout(LayoutKind.Sequential)]
     internal struct INPUT
     {
@@ -134,5 +160,78 @@ internal sealed class SendInputCursorTextSender : ICursorTextSender
         public uint dwFlags;
         public uint time;
         public nint dwExtraInfo;
+    }
+}
+
+internal interface IKeyboardInputApi
+{
+    uint SendInput(uint nInputs, SendInputCursorTextSender.INPUT[] pInputs, int cbSize);
+    int GetLastError();
+}
+
+internal sealed class Win32KeyboardInputApi : IKeyboardInputApi
+{
+    public uint SendInput(uint nInputs, SendInputCursorTextSender.INPUT[] pInputs, int cbSize) =>
+        NativeSendInput(nInputs, pInputs, cbSize);
+
+    public int GetLastError() => Marshal.GetLastWin32Error();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint NativeSendInput(uint nInputs, SendInputCursorTextSender.INPUT[] pInputs, int cbSize);
+}
+
+internal interface IClipboardPasteSender
+{
+    void Paste(string text, bool pressEnter);
+}
+
+internal sealed class ClipboardPasteSender : IClipboardPasteSender
+{
+    public void Paste(string text, bool pressEnter) =>
+        RunInSta(() =>
+        {
+            var previousData = System.Windows.Clipboard.GetDataObject();
+
+            try
+            {
+                System.Windows.Clipboard.SetText(text);
+                System.Windows.Forms.SendKeys.SendWait("^v");
+                if (pressEnter)
+                    System.Windows.Forms.SendKeys.SendWait("{ENTER}");
+            }
+            finally
+            {
+                if (previousData is not null)
+                    System.Windows.Clipboard.SetDataObject(previousData, true);
+                else
+                    System.Windows.Clipboard.Clear();
+            }
+        });
+
+    private static void RunInSta(Action action)
+    {
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        if (!completed)
+            throw new TimeoutException("Clipboard paste did not complete within 30 seconds.");
+
+        if (capturedException is not null)
+            ExceptionDispatchInfo.Capture(capturedException).Throw();
     }
 }
