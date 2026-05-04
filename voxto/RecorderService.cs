@@ -57,13 +57,7 @@ public class RecorderService : IDisposable
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
-    public void UpdateSettings(AppSettings settings)
-    {
-        if (!string.Equals(_settings.ModelType, settings.ModelType, StringComparison.Ordinal))
-            _whisperFactoryCache.Clear();
-
-        _settings = settings;
-    }
+    public void UpdateSettings(AppSettings settings) => _settings = settings;
 
     // ── Recording ────────────────────────────────────────────────────────────
 
@@ -282,6 +276,8 @@ internal sealed class DisposableResourceCache<T> : IDisposable where T : class, 
                 return _resource;
 
             _resource?.Dispose();
+            _resource = null;
+            _key = null;
             _resource = create(key);
             _key = key;
             return _resource;

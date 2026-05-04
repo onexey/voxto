@@ -158,6 +158,22 @@ public sealed class RecorderServiceTests : IDisposable
         Assert.True(resource.IsDisposed);
     }
 
+    [Fact]
+    public void DisposableResourceCache_WhenReplacementCreationFails_DoesNotReturnDisposedInstance()
+    {
+        using var cache = new DisposableResourceCache<FakeDisposableResource>();
+        var original = cache.GetOrCreate("small", _ => new FakeDisposableResource(1));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            cache.GetOrCreate("medium", _ => throw new InvalidOperationException("boom")));
+
+        var replacement = cache.GetOrCreate("small", _ => new FakeDisposableResource(2));
+
+        Assert.True(original.IsDisposed);
+        Assert.NotSame(original, replacement);
+        Assert.False(replacement.IsDisposed);
+    }
+
     private string CreateTempAudioFile()
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.wav");
