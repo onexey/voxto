@@ -21,25 +21,26 @@
             BorderThickness="1"
             Padding="12,6">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <!-- Pulsing status dot — colour set from code-behind -->
-            <Ellipse x:Name="StatusDot"
-                     Width="10" Height="10"
-                     Fill="#FFEF4444"
-                     VerticalAlignment="Center"
-                     Margin="0,0,8,0">
-                <Ellipse.Triggers>
+            <!-- Brand state icon — source set from code-behind based on AppState.
+                 Pulses opacity so it reads as an active indicator, not a static logo. -->
+            <Image x:Name="StateIcon"
+                   Width="18" Height="18"
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   VerticalAlignment="Center"
+                   Margin="0,0,8,0">
+                <Image.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
                         <BeginStoryboard>
                             <Storyboard RepeatBehavior="Forever">
                                 <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 From="1" To="0.2"
+                                                 From="1.0" To="0.35"
                                                  Duration="0:0:0.8"
                                                  AutoReverse="True"/>
                             </Storyboard>
                         </BeginStoryboard>
                     </EventTrigger>
-                </Ellipse.Triggers>
-            </Ellipse>
+                </Image.Triggers>
+            </Image>
             <!-- Message text — set from code-behind -->
             <TextBlock x:Name="MessageText"
                        Text="Recording…"

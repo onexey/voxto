@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Voxto Recording animated</title>
+  <path d="M14 10 H50 a8 8 0 0 1 8 8 v22 a8 8 0 0 1 -8 8 H30 l-9 8 v-8 H14 a8 8 0 0 1 -8 -8 V18 a8 8 0 0 1 8 -8 z" fill="#E5484D"/>
+  <rect x="16" y="18" width="4" height="22" rx="2" fill="#FFFFFF"><animate attributeName="y" values="24.6;18;24.6" dur="0.9s" repeatCount="indefinite"/><animate attributeName="height" values="8.8;22;8.8" dur="0.9s" repeatCount="indefinite"/></rect>
+  <rect x="23" y="22" width="4" height="14" rx="2" fill="#FFFFFF"><animate attributeName="y" values="22;25.5;22" dur="0.9s" repeatCount="indefinite"/><animate attributeName="height" values="14;7;14" dur="0.9s" repeatCount="indefinite"/></rect>
+  <rect x="30" y="25" width="4" height="8" rx="2" fill="#FFFFFF"><animate attributeName="y" values="26.6;25.2;26.6" dur="0.9s" repeatCount="indefinite"/><animate attributeName="height" values="4.8;7.6;4.8" dur="0.9s" repeatCount="indefinite"/></rect>
+  <rect x="37" y="22" width="4" height="14" rx="2" fill="#FFFFFF"><animate attributeName="y" values="23.05;26.9;23.05" dur="0.9s" repeatCount="indefinite"/><animate attributeName="height" values="11.9;4.2;11.9" dur="0.9s" repeatCount="indefinite"/></rect>
+  <rect x="44" y="18" width="4" height="22" rx="2" fill="#FFFFFF"><animate attributeName="y" values="23.5;19.65;23.5" dur="0.9s" repeatCount="indefinite"/><animate attributeName="height" values="11;18.7;11" dur="0.9s" repeatCount="indefinite"/></rect>
+</svg>
