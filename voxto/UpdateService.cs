@@ -191,14 +191,25 @@ public sealed class UpdateService : IDisposable
 
     /// <summary>
     /// Runs an immediate update check regardless of the scheduled interval.
+    /// When automatic download/install is enabled in settings, discovery continues
+    /// into download, install, and restart. Otherwise the update remains pending
+    /// until the user chooses to install it.
     /// Safe to call from any thread.
     /// </summary>
-    public async Task CheckForUpdatesAsync(bool? downloadAndApply = null)
+    public Task CheckForUpdatesAsync() => CheckForUpdatesAsync(_settings.AutoDownloadInstallRestartEnabled);
+
+    /// <summary>
+    /// Runs an immediate update check regardless of the scheduled interval.
+    /// Safe to call from any thread.
+    /// </summary>
+    /// <param name="downloadAndApply">
+    /// <c>true</c> to continue from discovery into download, install, and restart
+    /// immediately; <c>false</c> to stop after discovery and leave the update pending.
+    /// </param>
+    public async Task CheckForUpdatesAsync(bool downloadAndApply)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        await CheckAndDownloadAsync(
-            cts.Token,
-            downloadAndApply ?? _settings.AutoDownloadInstallRestartEnabled).ConfigureAwait(false);
+        await CheckAndDownloadAsync(cts.Token, downloadAndApply).ConfigureAwait(false);
     }
 
     /// <summary>

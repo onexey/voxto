@@ -256,6 +256,27 @@ public class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckForUpdatesAsync_ExplicitFalse_WithAutoInstallEnabled_OnlyDiscoversUpdate()
+    {
+        const string version = "9999.2.2.5";
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version),
+            AutoDownloadInstallRestartEnabled = true
+        };
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync(downloadAndApply: false);
+
+        Assert.Equal(version, service.PendingVersion);
+        Assert.Null(service.PendingMsiPath);
+        Assert.Equal(0, harness.DownloadCallCount);
+        Assert.Equal(0, harness.ApplyCallCount);
+        Assert.Empty(harness.FailedMessages);
+    }
+
+    [Fact]
     public async Task DownloadAndApplyPendingUpdateAsync_WithoutPendingUpdate_RaisesActionableFailureMessage()
     {
         var harness = new UpdateServiceHarness(_tempDir);
