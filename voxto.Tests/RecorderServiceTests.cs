@@ -169,9 +169,62 @@ public sealed class RecorderServiceTests : IDisposable
         await service.StartRecordingAsync();
         recorder.RaiseRecordingStopped(new InvalidOperationException("waveInPrepareHeader failed"));
 
-        Assert.Equal("waveInPrepareHeader failed", failureMessage);
+        Assert.Equal("Recording stopped unexpectedly: waveInPrepareHeader failed", failureMessage);
         Assert.False(completed);
         Assert.True(recorder.IsDisposed);
+    }
+
+    [Fact]
+    public async Task StopAndTranscribeAsync_WhenRecordingStoppedNeverArrives_TimesOutAndRaisesContextualFailure()
+    {
+        var recorder = new FakeAudioRecorder();
+        var output = new SpyOutput();
+        var service = new RecorderService(
+            new AppSettings { EnabledOutputs = ["spy"] },
+            new OutputManager(output),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]),
+            () => recorder,
+            TimeSpan.FromMilliseconds(50));
+        string? failureMessage = null;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+
+        await service.StartRecordingAsync();
+        await service.StopAndTranscribeAsync();
+
+        Assert.Equal(
+            "Timed out waiting for recording to stop: RecordingStopped was not raised within 0.1 seconds.",
+            failureMessage);
+        Assert.True(recorder.IsDisposed);
+        Assert.Equal(1, recorder.StopRecordingCallCount);
+        Assert.Equal(0, output.CallCount);
+    }
+
+    [Fact]
+    public async Task StartRecordingAsync_WhenAudioWriteFails_RaisesFailureWithoutThrowingFromCallback()
+    {
+        var recorder = new FakeAudioRecorder();
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]),
+            () => recorder);
+        string? failureMessage = null;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+
+        await service.StartRecordingAsync();
+
+        var waveWriterField = typeof(RecorderService).GetField("_waveWriter", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var writer = Assert.IsType<WaveFileWriter>(waveWriterField?.GetValue(service));
+        writer.Dispose();
+
+        var exception = Record.Exception(() => recorder.RaiseDataAvailable([1, 2, 3]));
+
+        Assert.Null(exception);
+        Assert.StartsWith("Failed to persist captured audio:", failureMessage);
+        Assert.True(recorder.IsDisposed);
+        Assert.Equal(1, recorder.StopRecordingCallCount);
     }
 
     private string CreateTempAudioFile()

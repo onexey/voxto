@@ -14,17 +14,21 @@ namespace Voxto;
 /// </summary>
 public class RecorderService : IDisposable
 {
+    private static readonly TimeSpan RecordingStoppedTimeout = TimeSpan.FromSeconds(5);
+
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
     private readonly Func<IAudioRecorder> _audioRecorderFactory;
     private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
     private readonly object _transcriptionSync = new();
+    private readonly TimeSpan _recordingStoppedTimeout;
 
     private IAudioRecorder? _waveIn;
     private WaveFileWriter? _waveWriter;
     private string? _tempWavPath;
     private bool _isRecording;
+    private int _recordingFailureHandled;
     private TaskCompletionSource<StoppedEventArgs>? _recordingStoppedSource;
 
     /// <summary>Raised when all enabled outputs have been written successfully.</summary>
@@ -53,12 +57,14 @@ public class RecorderService : IDisposable
         AppSettings settings,
         OutputManager outputManager,
         Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? transcribeSegmentsAsync,
-        Func<IAudioRecorder>? audioRecorderFactory = null)
+        Func<IAudioRecorder>? audioRecorderFactory = null,
+        TimeSpan? recordingStoppedTimeout = null)
     {
         _settings      = settings;
         _outputManager = outputManager;
         _transcribeSegmentsAsync = transcribeSegmentsAsync ?? TranscribeSegmentsAsync;
         _audioRecorderFactory = audioRecorderFactory ?? CreateAudioRecorder;
+        _recordingStoppedTimeout = recordingStoppedTimeout ?? RecordingStoppedTimeout;
     }
 
     /// <summary>Applies updated settings (e.g. model type or output folder) without restarting.</summary>
@@ -76,6 +82,7 @@ public class RecorderService : IDisposable
             return Task.CompletedTask;
 
         _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
+        _recordingFailureHandled = 0;
         _recordingStoppedSource = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
@@ -119,6 +126,16 @@ public class RecorderService : IDisposable
 
         if (stoppedTask is not null)
         {
+            var completedTask = await Task.WhenAny(stoppedTask, Task.Delay(_recordingStoppedTimeout));
+            if (completedTask != stoppedTask)
+            {
+                HandleRecordingFailure(
+                    new TimeoutException($"RecordingStopped was not raised within {_recordingStoppedTimeout.TotalSeconds:0.#} seconds."),
+                    deleteTempFile: true,
+                    "Timed out waiting for recording to stop");
+                return;
+            }
+
             var stoppedArgs = await stoppedTask;
             if (stoppedArgs.Exception is not null)
                 return;
@@ -298,8 +315,8 @@ public class RecorderService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to persist captured audio");
-            throw;
+            TryStopRecordingAfterWriteFailure();
+            HandleRecordingFailure(ex, deleteTempFile: true, "Failed to persist captured audio");
         }
     }
 
@@ -315,10 +332,27 @@ public class RecorderService : IDisposable
 
     private void HandleRecordingFailure(Exception ex, bool deleteTempFile, string message)
     {
+        if (Interlocked.Exchange(ref _recordingFailureHandled, 1) == 1)
+            return;
+
+        _recordingStoppedSource?.TrySetResult(new StoppedEventArgs(ex));
+        var failureMessage = $"{message}: {ex.Message}";
         Log.Error(ex, "{Message}", message);
         _isRecording = false;
         CleanupRecordingResources(deleteTempFile);
-        TranscriptionFailed?.Invoke(ex.Message);
+        TranscriptionFailed?.Invoke(failureMessage);
+    }
+
+    private void TryStopRecordingAfterWriteFailure()
+    {
+        try
+        {
+            _waveIn?.StopRecording();
+        }
+        catch (Exception stopException)
+        {
+            Log.Warning(stopException, "Failed to stop recording after a capture write error");
+        }
     }
 
     private void CleanupRecordingResources(bool deleteTempFile)
