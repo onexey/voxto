@@ -26,6 +26,8 @@ public partial class PreferencesWindow : Window
     private TextBox   _outputFolderBox    = null!;
     private Button    _browseOutputFolder = null!;
     private UIElement _outputFolderRow    = null!;
+    private CheckBox? _cursorInsertEnterCheck;
+    private UIElement? _cursorInsertOptionsRow;
 
     /// <summary>
     /// The settings produced when the user clicks Save.
@@ -59,6 +61,8 @@ public partial class PreferencesWindow : Window
 
     private void LoadSettings(AppSettings s)
     {
+        MoveTodoFileRowIntoOutputsPanel();
+
         // Model
         foreach (ComboBoxItem item in ModelCombo.Items)
         {
@@ -102,6 +106,15 @@ public partial class PreferencesWindow : Window
             {
                 cb.Checked   += (_, _) => UpdateTodoFileRowEnabled();
                 cb.Unchecked += (_, _) => UpdateTodoFileRowEnabled();
+                OutputsPanel.Children.Add(TodoFileRow);
+            }
+
+            if (output.Id == CursorInsertOutput.OutputId)
+            {
+                _cursorInsertOptionsRow = BuildCursorInsertOptionsRow(s.CursorInsertPressEnter);
+                OutputsPanel.Children.Add(_cursorInsertOptionsRow);
+                cb.Checked   += (_, _) => UpdateCursorInsertOptionsRowEnabled();
+                cb.Unchecked += (_, _) => UpdateCursorInsertOptionsRowEnabled();
             }
         }
 
@@ -131,6 +144,7 @@ public partial class PreferencesWindow : Window
         // Sync sub-row enabled states
         UpdateMarkdownFolderRowEnabled();
         UpdateTodoFileRowEnabled();
+        UpdateCursorInsertOptionsRowEnabled();
         UpdateFrequencyRowEnabled();
     }
 
@@ -173,6 +187,24 @@ public partial class PreferencesWindow : Window
         return row;
     }
 
+    private UIElement BuildCursorInsertOptionsRow(bool pressEnter)
+    {
+        _cursorInsertEnterCheck = new CheckBox
+        {
+            Content   = "Press Enter after inserting text",
+            IsChecked = pressEnter,
+            Margin    = new Thickness(18, 2, 0, 4)
+        };
+
+        return _cursorInsertEnterCheck;
+    }
+
+    private void MoveTodoFileRowIntoOutputsPanel()
+    {
+        if (TodoFileRow.Parent is System.Windows.Controls.Panel parent)
+            parent.Children.Remove(TodoFileRow);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void UpdateMarkdownFolderRowEnabled()
@@ -186,6 +218,15 @@ public partial class PreferencesWindow : Window
         var on = _outputChecks.TryGetValue("TodoAppend", out var cb) && cb.IsChecked == true;
         TodoFileBox.IsEnabled   = on;
         BrowseTodoBtn.IsEnabled = on;
+    }
+
+    private void UpdateCursorInsertOptionsRowEnabled()
+    {
+        if (_cursorInsertOptionsRow is null)
+            return;
+
+        var on = _outputChecks.TryGetValue(CursorInsertOutput.OutputId, out var cb) && cb.IsChecked == true;
+        _cursorInsertOptionsRow.IsEnabled = on;
     }
 
     private void UpdateFrequencyRowEnabled()
@@ -231,6 +272,7 @@ public partial class PreferencesWindow : Window
 
         s.TodoFilePath = TodoFileBox.Text.Trim();
         s.OutputFolder = _outputFolderBox.Text.Trim();
+        s.CursorInsertPressEnter = GetCursorInsertPressEnter(_cursorInsertEnterCheck?.IsChecked);
 
         s.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
         s.AutoDownloadInstallRestartEnabled = AutoInstallUpdateCheck.IsChecked == true;
@@ -246,6 +288,9 @@ public partial class PreferencesWindow : Window
 
         return s;
     }
+
+    internal static bool GetCursorInsertPressEnter(bool? isChecked) =>
+        isChecked == true;
 
     // ── Browse dialogs ────────────────────────────────────────────────────────
 

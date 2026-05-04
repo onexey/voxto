@@ -126,6 +126,7 @@ public class OutputManagerTests
 
         Assert.Contains(manager.All, output => output is MarkdownFileOutput);
         Assert.Contains(manager.All, output => output is TodoAppendOutput);
+        Assert.Contains(manager.All, output => output is CursorInsertOutput);
     }
 
     // ── Test doubles ──────────────────────────────────────────────────────────

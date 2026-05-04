@@ -14,6 +14,7 @@ A minimal Windows tray app that records audio, transcribes it with Whisper.net, 
 - 🔴 Small always-on-top overlay while recording (hidden when idle)
 - ⌨️ Hotkey support — **Toggle** (press once) or **Push-to-talk** (hold key), switchable from the tray
 - 🤖 Model selection from the tray — Tiny / Small / Medium / Large V3 Turbo
+- 🖊️ Output directly to the current cursor location, with optional Enter after insertion
 - 📁 Configurable output folder (set once, auto-named files)
 - 🔔 Balloon notification when transcription completes
 
@@ -65,19 +66,9 @@ Settings are saved to:
 | 🔴 Red | Recording |
 | 🟡 Amber | Transcribing |
 
-## Output format
+## Documentation
 
-```markdown
-# Transcription
-
-**Date:** Friday, April 24, 2026
-**Time:** 14:32:10
-
----
-
-`00:00:01` → `00:00:04`
-Hello, this is the first segment.
-
-`00:00:04` → `00:00:09`
-And this is the second segment.
-```
+- [Output targets](docs/outputs.md)
+- [Auto-update](docs/auto-update.md)
+- [Installer](docs/installer.md)
+- [Transcription performance](docs/transcription-performance.md)
