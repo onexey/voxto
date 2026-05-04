@@ -19,6 +19,7 @@ public sealed class OutputManager
         {
             new MarkdownFileOutput(),
             new TodoAppendOutput(),
+            new CursorInsertOutput(),
             // ← register future outputs here
         };
     }

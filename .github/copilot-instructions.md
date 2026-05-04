@@ -31,6 +31,7 @@ voxto/
 │   ├── RecorderService.cs    # audio capture + Whisper transcription
 │   ├── OutputManager.cs      # routes results to all enabled ITranscriptionOutput
 │   ├── ITranscriptionOutput.cs
+│   ├── CursorInsertOutput.cs # inserts transcription into the active cursor location
 │   ├── MarkdownFileOutput.cs # one .md file per recording
 │   ├── TodoAppendOutput.cs   # appends [ ] task line to a single .md file
 │   ├── TranscriptionResult.cs
@@ -55,12 +56,14 @@ voxto/
 │   ├── OutputManagerTests.cs
 │   ├── OverlayWindowTests.cs
 │   ├── DisposableResourceCacheTests.cs
+│   ├── CursorInsertOutputTests.cs
 │   ├── RecorderServiceTests.cs
 │   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
 │   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
+│   ├── outputs.md            # output targets and their configuration
 │   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here

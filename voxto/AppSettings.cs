@@ -73,6 +73,12 @@ public class AppSettings
     public string TodoFilePath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto", "todo.md");
 
+    /// <summary>
+    /// Whether the cursor insertion output should press Enter after inserting text.
+    /// Defaults to <c>false</c>.
+    /// </summary>
+    public bool CursorInsertPressEnter { get; set; }
+
     // ── Auto-update ───────────────────────────────────────────────────────────
 
     /// <summary>

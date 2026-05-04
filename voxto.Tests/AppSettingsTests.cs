@@ -195,6 +195,13 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void NewInstance_DefaultCursorInsertPressEnter_IsFalse()
+    {
+        var settings = new AppSettings();
+        Assert.False(settings.CursorInsertPressEnter);
+    }
+
+    [Fact]
     public void SaveThenLoad_PreservesTodFilePath()
     {
         var path     = @"C:\Users\Test\notes\todo.md";
@@ -203,6 +210,16 @@ public class AppSettingsTests : IDisposable
 
         var loaded = AppSettings.Load(TempFile);
         Assert.Equal(path, loaded.TodoFilePath);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesCursorInsertPressEnter()
+    {
+        var original = new AppSettings { CursorInsertPressEnter = true };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.True(loaded.CursorInsertPressEnter);
     }
 
     [Fact]
