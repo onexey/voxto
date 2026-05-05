@@ -236,10 +236,6 @@ public sealed class RecorderServiceTests : IDisposable
 
     private sealed class SpyOutput : ITranscriptionOutput
     {
-        public string Id => "spy";
-
-        public string DisplayName => "spy";
-
         public IOutputSettings SettingsPage { get; } = new StubSettingsPage("spy");
 
         public int CallCount { get; private set; }
@@ -256,10 +252,6 @@ public sealed class RecorderServiceTests : IDisposable
 
     private sealed class FailingOutput : ITranscriptionOutput
     {
-        public string Id => "fail";
-
-        public string DisplayName => "fail";
-
         public IOutputSettings SettingsPage { get; } = new StubSettingsPage("fail");
 
         public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>

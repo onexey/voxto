@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Serilog;
 
 namespace Voxto;
 
@@ -19,13 +20,17 @@ public sealed class OutputSettingsAdapter(AppSettings settings)
                 if (loaded is not null)
                     return loaded;
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // Fall through to defaults for malformed persisted output settings.
+                Log.Warning(ex, "Failed to deserialize output settings for {OutputId}. Falling back to defaults.", outputId);
             }
-            catch (NotSupportedException)
+            catch (NotSupportedException ex)
             {
-                // Fall through to defaults for unsupported persisted output settings.
+                Log.Warning(ex, "Unsupported output settings payload for {OutputId}. Falling back to defaults.", outputId);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Unexpected error while loading output settings for {OutputId}. Falling back to defaults.", outputId);
             }
         }
 

@@ -1,20 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using CheckBox = System.Windows.Controls.CheckBox;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Voxto;
 
 internal sealed class CursorInsertOutputSettingsPage : OutputSettingsPageBase<CursorInsertOutputSettings>
 {
-    private readonly CheckBox _pressEnterCheck = new()
-    {
-        Content = "Press Enter after inserting text",
-        FontSize = 13,
-        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x37, 0x41, 0x51))
-    };
-
     public CursorInsertOutputSettingsPage()
         : base(
             id: CursorInsertOutput.OutputId,
@@ -27,7 +19,7 @@ internal sealed class CursorInsertOutputSettingsPage : OutputSettingsPageBase<Cu
     protected override FrameworkElement BuildEditor()
     {
         var stack = new StackPanel();
-        stack.Children.Add(_pressEnterCheck);
+        stack.Children.Add(CreateBoundCheckBox("Press Enter after inserting text", nameof(CursorInsertOutputSettings.PressEnterAfterInsert)));
         stack.Children.Add(new TextBlock
         {
             Text = "Useful for chats, editors, AI prompts, and other text fields.",
@@ -38,10 +30,4 @@ internal sealed class CursorInsertOutputSettingsPage : OutputSettingsPageBase<Cu
         });
         return stack;
     }
-
-    protected override void ReadSettings(CursorInsertOutputSettings settings) =>
-        _pressEnterCheck.IsChecked = settings.PressEnterAfterInsert;
-
-    protected override void WriteSettings(CursorInsertOutputSettings settings) =>
-        settings.PressEnterAfterInsert = _pressEnterCheck.IsChecked == true;
 }

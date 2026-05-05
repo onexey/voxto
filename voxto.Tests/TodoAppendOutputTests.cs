@@ -197,19 +197,20 @@ public class TodoAppendOutputTests : IDisposable
         Assert.True(File.Exists(configuredFile));
     }
 
-    // ── ITranscriptionOutput contract ─────────────────────────────────────────
-
-    [Fact]
-    public void Id_IsTodoAppend()    => Assert.Equal("TodoAppend", _output.Id);
-
-    [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+    // ── Settings page metadata ────────────────────────────────────────────────
 
     [Fact]
     public void SettingsPage_IdMatchesOutputId()
     {
         var pageId = RunInSta(() => _output.SettingsPage.Id);
-        Assert.Equal(_output.Id, pageId);
+        Assert.Equal("TodoAppend", pageId);
+    }
+
+    [Fact]
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
     }
 
     private static T RunInSta<T>(Func<T> action)

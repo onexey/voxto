@@ -195,22 +195,6 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Clone_PreservesOutputSettings()
-    {
-        var original = new AppSettings();
-        original.OutputSettings["CursorInsert"] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
-        {
-            PressEnterAfterInsert = true
-        });
-
-        var clone = original.Clone();
-        var settings = clone.OutputSettings["CursorInsert"].Deserialize<CursorInsertOutputSettings>();
-
-        Assert.NotNull(settings);
-        Assert.True(settings.PressEnterAfterInsert);
-    }
-
-    [Fact]
     public void NewInstance_DefaultAutoDownloadInstallRestart_IsFalse()
     {
         var settings = new AppSettings();

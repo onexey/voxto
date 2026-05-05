@@ -8,12 +8,7 @@ namespace Voxto;
 
 internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<TodoAppendOutputSettings>
 {
-    private readonly TextBox _todoFileBox = new()
-    {
-        Height = 38,
-        VerticalContentAlignment = VerticalAlignment.Center,
-        FontSize = 13
-    };
+    private TextBox? _todoFileBox;
 
     public TodoAppendOutputSettingsPage()
         : base(
@@ -26,6 +21,8 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
 
     protected override FrameworkElement BuildEditor()
     {
+        _todoFileBox = CreateBoundTextBox(nameof(TodoAppendOutputSettings.TodoFilePath));
+
         var browseButton = new Button
         {
             Content = "Browse…",
@@ -49,26 +46,19 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
         return stack;
     }
 
-    protected override void ReadSettings(TodoAppendOutputSettings settings) =>
-        _todoFileBox.Text = settings.TodoFilePath;
-
-    protected override void WriteSettings(TodoAppendOutputSettings settings) =>
-        settings.TodoFilePath = _todoFileBox.Text.Trim();
-
     private void OnBrowseTodoFile(object? sender, RoutedEventArgs e)
     {
         using var dialog = new System.Windows.Forms.SaveFileDialog
         {
             Title = "Choose Todo file",
             Filter = "Markdown files (*.md)|*.md|All files (*.*)|*.*",
-            FileName = Path.GetFileName(_todoFileBox.Text),
-            InitialDirectory = Path.GetDirectoryName(_todoFileBox.Text)
+            FileName = Path.GetFileName(_todoFileBox?.Text),
+            InitialDirectory = Path.GetDirectoryName(_todoFileBox?.Text)
                                ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             OverwritePrompt = false
         };
 
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            _todoFileBox.Text = dialog.FileName;
+            _todoFileBox!.Text = dialog.FileName;
     }
-
 }

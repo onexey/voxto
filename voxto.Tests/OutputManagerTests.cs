@@ -137,12 +137,20 @@ public class OutputManagerTests
         Assert.Equal(["a", "b"], manager.AllSettingsPages.Select(page => page.Id).ToArray());
     }
 
+    [Fact]
+    public void DefaultConstructor_SettingsPageIdsAreUnique()
+    {
+        var manager = new OutputManager();
+
+        Assert.Equal(
+            manager.AllSettingsPages.Count,
+            manager.AllSettingsPages.Select(page => page.Id).Distinct(StringComparer.Ordinal).Count());
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class SpyOutput(string id) : ITranscriptionOutput
     {
-        public string Id          => id;
-        public string DisplayName => id;
         public IOutputSettings SettingsPage { get; } = new StubSettingsPage(id);
         public int    CallCount   { get; private set; }
 
@@ -155,8 +163,6 @@ public class OutputManagerTests
 
     private sealed class FailingOutput(string id) : ITranscriptionOutput
     {
-        public string Id          => id;
-        public string DisplayName => id;
         public IOutputSettings SettingsPage { get; } = new StubSettingsPage(id);
 
         public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>

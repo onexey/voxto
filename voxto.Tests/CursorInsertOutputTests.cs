@@ -101,19 +101,24 @@ public class CursorInsertOutputTests
     }
 
     [Fact]
-    public void Id_IsCursorInsert() => Assert.Equal("CursorInsert", _output.Id);
-
-    [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
-
-    [Fact]
-    public void Id_UsesSharedOutputIdConstant() => Assert.Equal(CursorInsertOutput.OutputId, _output.Id);
+    public void SettingsPage_IdIsCursorInsert()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal("CursorInsert", pageId);
+    }
 
     [Fact]
     public void SettingsPage_IdMatchesOutputId()
     {
         var pageId = RunInSta(() => _output.SettingsPage.Id);
-        Assert.Equal(_output.Id, pageId);
+        Assert.Equal(CursorInsertOutput.OutputId, pageId);
+    }
+
+    [Fact]
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
     }
 
     [Fact]

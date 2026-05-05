@@ -59,13 +59,13 @@ public class AppSettings
     public int HotkeyVirtualKey { get; set; } = 0x78;
 
     /// <summary>
-    /// IDs of the <see cref="ITranscriptionOutput"/> implementations that are currently enabled.
+    /// IDs of the <see cref="IOutputSettings"/> add-ons that are currently enabled.
     /// Defaults to <c>["MarkdownFile"]</c> (one file per recording).
     /// </summary>
     public List<string> EnabledOutputs { get; set; } = ["MarkdownFile"];
 
     /// <summary>
-    /// Per-output configuration blobs keyed by <see cref="ITranscriptionOutput.Id"/>.
+    /// Per-output configuration blobs keyed by <see cref="IOutputSettings.Id"/>.
     /// </summary>
     public Dictionary<string, JsonElement> OutputSettings { get; set; } = [];
 
@@ -94,12 +94,6 @@ public class AppSettings
     /// <c>null</c> means never checked.
     /// </summary>
     public DateTime? LastUpdateCheck { get; set; }
-
-    internal AppSettings Clone()
-    {
-        var json = JsonSerializer.Serialize(this, SerializerOptions);
-        return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
-    }
 
     /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.

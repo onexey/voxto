@@ -9,15 +9,11 @@ namespace Voxto;
 /// </summary>
 internal sealed class TodoAppendOutput : ITranscriptionOutput
 {
-    private IOutputSettings? _settingsPage;
-
-    public string Id => "TodoAppend";
-    public string DisplayName => "Todo list (append to single file)";
-    public IOutputSettings SettingsPage => _settingsPage ??= new TodoAppendOutputSettingsPage();
+    public IOutputSettings SettingsPage { get; } = new TodoAppendOutputSettingsPage();
 
     public async Task WriteAsync(TranscriptionResult result, AppSettings settings)
     {
-        var outputSettings = new OutputSettingsAdapter(settings).Get<TodoAppendOutputSettings>(Id);
+        var outputSettings = new OutputSettingsAdapter(settings).Get<TodoAppendOutputSettings>(SettingsPage.Id);
 
         var path = outputSettings.TodoFilePath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

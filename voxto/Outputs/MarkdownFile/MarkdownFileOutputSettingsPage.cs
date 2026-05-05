@@ -8,12 +8,7 @@ namespace Voxto;
 
 internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<MarkdownFileOutputSettings>
 {
-    private readonly TextBox _outputFolderBox = new()
-    {
-        Height = 38,
-        VerticalContentAlignment = VerticalAlignment.Center,
-        FontSize = 13
-    };
+    private TextBox? _outputFolderBox;
 
     public MarkdownFileOutputSettingsPage()
         : base(
@@ -26,6 +21,8 @@ internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<Ma
 
     protected override FrameworkElement BuildEditor()
     {
+        _outputFolderBox = CreateBoundTextBox(nameof(MarkdownFileOutputSettings.OutputFolder));
+
         var browseButton = new Button
         {
             Content = "Browse…",
@@ -49,23 +46,16 @@ internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<Ma
         return stack;
     }
 
-    protected override void ReadSettings(MarkdownFileOutputSettings settings) =>
-        _outputFolderBox.Text = settings.OutputFolder;
-
-    protected override void WriteSettings(MarkdownFileOutputSettings settings) =>
-        settings.OutputFolder = _outputFolderBox.Text.Trim();
-
     private void OnBrowseOutputFolder(object? sender, RoutedEventArgs e)
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
             Description = "Choose where transcription files are saved",
-            SelectedPath = _outputFolderBox.Text,
+            SelectedPath = _outputFolderBox?.Text,
             UseDescriptionForTitle = true
         };
 
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            _outputFolderBox.Text = dialog.SelectedPath;
+            _outputFolderBox!.Text = dialog.SelectedPath;
     }
-
 }

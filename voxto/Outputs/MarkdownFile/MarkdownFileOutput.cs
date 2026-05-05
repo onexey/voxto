@@ -7,15 +7,11 @@ namespace Voxto;
 /// </summary>
 internal sealed class MarkdownFileOutput : ITranscriptionOutput
 {
-    private IOutputSettings? _settingsPage;
-
-    public string Id => "MarkdownFile";
-    public string DisplayName => "Markdown files (one per recording)";
-    public IOutputSettings SettingsPage => _settingsPage ??= new MarkdownFileOutputSettingsPage();
+    public IOutputSettings SettingsPage { get; } = new MarkdownFileOutputSettingsPage();
 
     public Task WriteAsync(TranscriptionResult result, AppSettings settings)
     {
-        var outputSettings = new OutputSettingsAdapter(settings).Get<MarkdownFileOutputSettings>(Id);
+        var outputSettings = new OutputSettingsAdapter(settings).Get<MarkdownFileOutputSettings>(SettingsPage.Id);
 
         Directory.CreateDirectory(outputSettings.OutputFolder);
 

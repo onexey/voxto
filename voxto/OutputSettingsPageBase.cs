@@ -1,7 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
+using Binding = System.Windows.Data.Binding;
 using CheckBox = System.Windows.Controls.CheckBox;
+using TextBox = System.Windows.Controls.TextBox;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfColor = System.Windows.Media.Color;
 
@@ -45,7 +48,7 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
         EnsureView();
         _enabledCheck!.IsChecked = settings.EnabledOutputs.Contains(Id);
         _settings = adapter.Get<TSettings>(Id);
-        ReadSettings(_settings);
+        _contentHost!.DataContext = _settings;
         UpdateContentState();
     }
 
@@ -63,15 +66,10 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
             settings.EnabledOutputs.RemoveAll(outputId => outputId == Id);
         }
 
-        WriteSettings(_settings);
         adapter.Set(Id, _settings);
     }
 
     protected abstract FrameworkElement BuildEditor();
-
-    protected abstract void ReadSettings(TSettings settings);
-
-    protected abstract void WriteSettings(TSettings settings);
 
     protected FrameworkElement CreateLabel(string text) => new TextBlock
     {
@@ -91,6 +89,21 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
         LineHeight = 20
     };
 
+    protected TextBox CreateBoundTextBox(string propertyName) => new TextBox
+    {
+        Height = 38,
+        VerticalContentAlignment = VerticalAlignment.Center,
+        FontSize = 13,
+        Margin = new Thickness(0)
+    }.WithBinding(TextBox.TextProperty, propertyName);
+
+    protected CheckBox CreateBoundCheckBox(string content, string propertyName) => new CheckBox
+    {
+        Content = content,
+        FontSize = 13,
+        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x37, 0x41, 0x51))
+    }.WithBinding(CheckBox.IsCheckedProperty, propertyName);
+
     private FrameworkElement BuildView()
     {
         _enabledCheck = new CheckBox
@@ -107,6 +120,7 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
         _contentHost = new Border
         {
             Child = BuildEditor(),
+            DataContext = _settings,
             Padding = new Thickness(24),
             CornerRadius = new CornerRadius(16),
             Background = WpfBrushes.White,
@@ -159,5 +173,20 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
     private void EnsureView()
     {
         _ = View;
+    }
+}
+
+internal static class OutputSettingsBindingExtensions
+{
+    public static TControl WithBinding<TControl>(this TControl control, DependencyProperty property, string propertyName)
+        where TControl : FrameworkElement
+    {
+        control.SetBinding(property, new Binding(propertyName)
+        {
+            Mode = BindingMode.TwoWay,
+            UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+        });
+
+        return control;
     }
 }

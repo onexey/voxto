@@ -151,19 +151,20 @@ public class MarkdownFileOutputTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_tempDir, "legacy")));
     }
 
-    // ── ITranscriptionOutput contract ─────────────────────────────────────────
-
-    [Fact]
-    public void Id_IsMarkdownFile() => Assert.Equal("MarkdownFile", _output.Id);
-
-    [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+    // ── Settings page metadata ────────────────────────────────────────────────
 
     [Fact]
     public void SettingsPage_IdMatchesOutputId()
     {
         var pageId = RunInSta(() => _output.SettingsPage.Id);
-        Assert.Equal(_output.Id, pageId);
+        Assert.Equal("MarkdownFile", pageId);
+    }
+
+    [Fact]
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
     }
 
     private static string NormalizeLineEndings(string value) =>
