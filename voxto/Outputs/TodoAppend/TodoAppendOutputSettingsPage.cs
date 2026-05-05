@@ -48,17 +48,26 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
 
     private void OnBrowseTodoFile(object? sender, RoutedEventArgs e)
     {
+        var configuredPath = _todoFileBox?.Text ?? string.Empty;
+
         using var dialog = new System.Windows.Forms.SaveFileDialog
         {
             Title = "Choose Todo file",
             Filter = "Markdown files (*.md)|*.md|All files (*.*)|*.*",
-            FileName = Path.GetFileName(_todoFileBox?.Text),
-            InitialDirectory = Path.GetDirectoryName(_todoFileBox?.Text)
-                               ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            FileName = GetDialogFileName(configuredPath),
+            InitialDirectory = GetDialogInitialDirectory(configuredPath),
             OverwritePrompt = false
         };
 
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             _todoFileBox!.Text = dialog.FileName;
     }
+
+    internal static string GetDialogFileName(string? configuredPath) =>
+        Path.GetFileName(configuredPath ?? string.Empty);
+
+    internal static string GetDialogInitialDirectory(string? configuredPath) =>
+        string.IsNullOrWhiteSpace(configuredPath)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+            : Path.GetDirectoryName(configuredPath) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 }

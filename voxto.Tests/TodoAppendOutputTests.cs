@@ -213,6 +213,20 @@ public class TodoAppendOutputTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(displayName));
     }
 
+    [Fact]
+    public void GetDialogFileName_NullPath_ReturnsEmptyString()
+    {
+        Assert.Equal(string.Empty, TodoAppendOutputSettingsPage.GetDialogFileName(null));
+    }
+
+    [Fact]
+    public void GetDialogInitialDirectory_EmptyPath_FallsBackToDocuments()
+    {
+        var expected = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        Assert.Equal(expected, TodoAppendOutputSettingsPage.GetDialogInitialDirectory(string.Empty));
+    }
+
     private static T RunInSta<T>(Func<T> action)
     {
         T? result = default;

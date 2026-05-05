@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -27,8 +26,8 @@ public partial class PreferencesWindow : Window
     {
         _outputManager = outputManager;
         _updateService = updateService;
-        _currentSettings = CopySettings(current);
-        Result = CopySettings(_currentSettings);
+        _currentSettings = new AppSettings(current);
+        Result = new AppSettings(_currentSettings);
 
         InitializeComponent();
 
@@ -118,7 +117,7 @@ public partial class PreferencesWindow : Window
 
     private AppSettings BuildSettings()
     {
-        var settings = CopySettings(_currentSettings);
+        var settings = new AppSettings(_currentSettings);
 
         settings.ModelType = ModelCombo.SelectedItem is ComboBoxItem selected
             ? (string)selected.Tag
@@ -143,12 +142,6 @@ public partial class PreferencesWindow : Window
             outputSettingsPage.Save(settings, adapter);
 
         return settings;
-    }
-
-    private static AppSettings CopySettings(AppSettings settings)
-    {
-        var json = JsonSerializer.Serialize(settings);
-        return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
     }
 
     private void UpdateFrequencyRowEnabled()

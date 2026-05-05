@@ -195,6 +195,31 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void CopyConstructor_DeepCopiesCollections()
+    {
+        var original = new AppSettings
+        {
+            ModelType = "Medium",
+            EnabledOutputs = ["MarkdownFile", "TodoAppend"],
+            OutputSettings =
+            {
+                ["CursorInsert"] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
+
+        var copy = new AppSettings(original);
+        original.EnabledOutputs.Clear();
+        original.OutputSettings.Clear();
+
+        Assert.Equal("Medium", copy.ModelType);
+        Assert.Equal(["MarkdownFile", "TodoAppend"], copy.EnabledOutputs);
+        Assert.True(copy.OutputSettings["CursorInsert"].Deserialize<CursorInsertOutputSettings>()!.PressEnterAfterInsert);
+    }
+
+    [Fact]
     public void NewInstance_DefaultAutoDownloadInstallRestart_IsFalse()
     {
         var settings = new AppSettings();

@@ -96,6 +96,31 @@ public class AppSettings
     public DateTime? LastUpdateCheck { get; set; }
 
     /// <summary>
+    /// Creates a deep copy of persisted settings values.
+    /// </summary>
+    public AppSettings(AppSettings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        ModelType = other.ModelType;
+        HotkeyMode = other.HotkeyMode;
+        HotkeyVirtualKey = other.HotkeyVirtualKey;
+        EnabledOutputs = [.. other.EnabledOutputs];
+        OutputSettings = other.OutputSettings.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Clone(),
+            StringComparer.Ordinal);
+        AutoUpdateEnabled = other.AutoUpdateEnabled;
+        AutoDownloadInstallRestartEnabled = other.AutoDownloadInstallRestartEnabled;
+        UpdateCheckInterval = other.UpdateCheckInterval;
+        LastUpdateCheck = other.LastUpdateCheck;
+    }
+
+    public AppSettings()
+    {
+    }
+
+    /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.
     /// </summary>
     /// <param name="path">

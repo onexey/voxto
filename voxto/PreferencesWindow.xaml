@@ -180,10 +180,16 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="3"/>
                             </Grid.RowDefinitions>
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              ContentSource="Header"
-                                              Margin="{TemplateBinding Padding}"/>
+                            <Border x:Name="TabFocusBorder"
+                                    Padding="{TemplateBinding Padding}"
+                                    CornerRadius="8"
+                                    BorderThickness="1"
+                                    BorderBrush="Transparent"
+                                    Background="Transparent">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  ContentSource="Header"/>
+                            </Border>
                             <Border x:Name="TabUnderline"
                                     Grid.Row="1"
                                     Margin="0,2,0,0"
@@ -193,6 +199,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="TabUnderline" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="TabFocusBorder" Property="BorderBrush" Value="{StaticResource AccentBorderBrush}"/>
+                                <Setter TargetName="TabFocusBorder" Property="Background" Value="{StaticResource AccentBrushSoft}"/>
                                 <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">

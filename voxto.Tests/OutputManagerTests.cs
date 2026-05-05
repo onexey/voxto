@@ -147,6 +147,14 @@ public class OutputManagerTests
             manager.AllSettingsPages.Select(page => page.Id).Distinct(StringComparer.Ordinal).Count());
     }
 
+    [Fact]
+    public void AllSettingsPages_IsCachedPerManagerInstance()
+    {
+        var manager = new OutputManager(new SpyOutput("a"));
+
+        Assert.Same(manager.AllSettingsPages, manager.AllSettingsPages);
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class SpyOutput(string id) : ITranscriptionOutput

@@ -1,8 +1,10 @@
 using System.Runtime.ExceptionServices;
 using System.Linq;
 using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
 using Voxto;
+using Border = System.Windows.Controls.Border;
 using Xunit;
 using TabControl = System.Windows.Controls.TabControl;
 
@@ -86,6 +88,39 @@ public class PreferencesWindowTests
         });
 
         Assert.Contains("ExperimentalOutput", enabledOutputs);
+    }
+
+    [Fact]
+    public void Constructor_TabTemplateContainsFocusIndicatorBorder()
+    {
+        var hasFocusBorder = RunInSta(() =>
+        {
+            using var updateService = new UpdateService(new AppSettings());
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService)
+            {
+                Left = -10000,
+                Top = 0,
+                ShowInTaskbar = false,
+                ShowActivated = false
+            };
+
+            window.Show();
+            window.UpdateLayout();
+
+            try
+            {
+                var tabs = (TabControl)window.FindName("PreferencesTabs");
+                var firstTab = tabs.Items.OfType<TabItem>().First();
+                firstTab.ApplyTemplate();
+                return firstTab.Template.FindName("TabFocusBorder", firstTab) is Border;
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.True(hasFocusBorder);
     }
 
     private static T RunInSta<T>(Func<T> action)

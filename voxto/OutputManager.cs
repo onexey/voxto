@@ -13,6 +13,7 @@ namespace Voxto;
 public sealed class OutputManager
 {
     private readonly IReadOnlyList<ITranscriptionOutput> _all;
+    private readonly IReadOnlyList<IOutputSettings> _allSettingsPages;
 
     public OutputManager()
     {
@@ -23,6 +24,7 @@ public sealed class OutputManager
             new CursorInsertOutput(),
             // ← register future outputs here
         };
+        _allSettingsPages = _all.Select(output => output.SettingsPage).ToArray();
     }
 
     /// <summary>
@@ -32,13 +34,14 @@ public sealed class OutputManager
     internal OutputManager(params ITranscriptionOutput[] outputs)
     {
         _all = outputs;
+        _allSettingsPages = _all.Select(output => output.SettingsPage).ToArray();
     }
 
     /// <summary>All registered outputs, in the order they will be executed.</summary>
     public IReadOnlyList<ITranscriptionOutput> All => _all;
 
     /// <summary>All registered output settings pages, in the same order as the outputs.</summary>
-    internal IReadOnlyList<IOutputSettings> AllSettingsPages => _all.Select(output => output.SettingsPage).ToArray();
+    internal IReadOnlyList<IOutputSettings> AllSettingsPages => _allSettingsPages;
 
     /// <summary>
      /// Runs every output whose ID appears in <see cref="AppSettings.EnabledOutputs"/>.
