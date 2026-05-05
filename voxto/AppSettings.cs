@@ -43,13 +43,6 @@ public class AppSettings
         "Voxto", "settings.json");
 
     /// <summary>
-    /// Folder where transcription Markdown files are saved.
-    /// Defaults to <c>Documents\Voxto</c>.
-    /// </summary>
-    public string OutputFolder { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto");
-
-    /// <summary>
     /// Whisper model to use for transcription.
     /// Valid values: <c>"Tiny"</c>, <c>"Small"</c>, <c>"Medium"</c>, <c>"LargeV3Turbo"</c>.
     /// Defaults to <c>"Small"</c>.
@@ -75,19 +68,6 @@ public class AppSettings
     /// Per-output configuration blobs keyed by <see cref="ITranscriptionOutput.Id"/>.
     /// </summary>
     public Dictionary<string, JsonElement> OutputSettings { get; set; } = [];
-
-    /// <summary>
-    /// Path of the single Markdown file used by the Todo output.
-    /// Defaults to <c>Documents\Voxto\todo.md</c>.
-    /// </summary>
-    public string TodoFilePath { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto", "todo.md");
-
-    /// <summary>
-    /// Whether the cursor insertion output should press Enter after inserting text.
-    /// Defaults to <c>false</c>.
-    /// </summary>
-    public bool CursorInsertPressEnter { get; set; }
 
     // ── Auto-update ───────────────────────────────────────────────────────────
 

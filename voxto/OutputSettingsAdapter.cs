@@ -5,11 +5,11 @@ namespace Voxto;
 /// <summary>
 /// Reads and writes typed per-output configuration inside <see cref="AppSettings.OutputSettings"/>.
 /// </summary>
-internal sealed class OutputSettingsAdapter(AppSettings settings)
+public sealed class OutputSettingsAdapter(AppSettings settings)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new();
 
-    public T Get<T>(string outputId, Func<T> defaultFactory, Func<AppSettings, T>? legacyFactory = null)
+    public T Get<T>(string outputId) where T : new()
     {
         if (settings.OutputSettings.TryGetValue(outputId, out var stored))
         {
@@ -19,15 +19,17 @@ internal sealed class OutputSettingsAdapter(AppSettings settings)
                 if (loaded is not null)
                     return loaded;
             }
-            catch
+            catch (JsonException)
             {
-                // Fall through to legacy/default settings.
+                // Fall through to defaults for malformed persisted output settings.
+            }
+            catch (NotSupportedException)
+            {
+                // Fall through to defaults for unsupported persisted output settings.
             }
         }
 
-        return legacyFactory is not null
-            ? legacyFactory(settings)
-            : defaultFactory();
+        return new T();
     }
 
     public void Set<T>(string outputId, T value)

@@ -10,7 +10,7 @@ namespace Voxto;
 /// </summary>
 public partial class PreferencesWindow : Window
 {
-    private readonly OutputSettingsManager _outputSettingsManager;
+    private readonly OutputManager _outputManager;
     private readonly UpdateService _updateService;
     private readonly AppSettings _currentSettings;
     private readonly List<IOutputSettings> _outputSettingsPages = [];
@@ -22,9 +22,9 @@ public partial class PreferencesWindow : Window
     public AppSettings Result { get; private set; }
 
     /// <summary>Opens the preferences window pre-populated with <paramref name="current"/> settings.</summary>
-    internal PreferencesWindow(AppSettings current, OutputSettingsManager outputSettingsManager, UpdateService updateService)
+    internal PreferencesWindow(AppSettings current, OutputManager outputManager, UpdateService updateService)
     {
-        _outputSettingsManager = outputSettingsManager;
+        _outputManager = outputManager;
         _updateService = updateService;
         _currentSettings = current.Clone();
         Result = _currentSettings.Clone();
@@ -47,7 +47,7 @@ public partial class PreferencesWindow : Window
 
     private void InsertOutputTabs()
     {
-        foreach (var outputSettingsPage in _outputSettingsManager.All)
+        foreach (var outputSettingsPage in _outputManager.AllSettingsPages)
         {
             _outputSettingsPages.Add(outputSettingsPage);
             PreferencesTabs.Items.Insert(PreferencesTabs.Items.Count - 1, new TabItem
@@ -137,7 +137,6 @@ public partial class PreferencesWindow : Window
                 : UpdateCheckInterval.Weekly;
         }
 
-        settings.EnabledOutputs = [];
         var adapter = new OutputSettingsAdapter(settings);
         foreach (var outputSettingsPage in _outputSettingsPages)
             outputSettingsPage.Save(settings, adapter);

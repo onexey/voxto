@@ -43,13 +43,6 @@ public class AppSettingsTests : IDisposable
         Assert.Equal(0x78, settings.HotkeyVirtualKey);
     }
 
-    [Fact]
-    public void NewInstance_DefaultOutputFolder_EndsWithVoxto()
-    {
-        var settings = new AppSettings();
-        Assert.EndsWith("Voxto", settings.OutputFolder, StringComparison.OrdinalIgnoreCase);
-    }
-
     // ── Load with no file ─────────────────────────────────────────────────────
 
     [Fact]
@@ -80,17 +73,6 @@ public class AppSettingsTests : IDisposable
 
         var loaded = AppSettings.Load(TempFile);
         Assert.Equal(HotkeyMode.PushToTalk, loaded.HotkeyMode);
-    }
-
-    [Fact]
-    public void SaveThenLoad_PreservesOutputFolder()
-    {
-        var path = @"C:\Users\Test\Recordings";
-        var original = new AppSettings { OutputFolder = path };
-        original.Save(TempFile);
-
-        var loaded = AppSettings.Load(TempFile);
-        Assert.Equal(path, loaded.OutputFolder);
     }
 
     [Fact]
@@ -186,41 +168,13 @@ public class AppSettingsTests : IDisposable
         Assert.Empty(loaded.EnabledOutputs);
     }
 
-    // ── TodoFilePath ──────────────────────────────────────────────────────────
+    // ── OutputSettings ────────────────────────────────────────────────────────
 
     [Fact]
-    public void NewInstance_DefaultTodoFilePath_EndsWithTodoMd()
+    public void NewInstance_DefaultOutputSettings_IsEmpty()
     {
         var settings = new AppSettings();
-        Assert.EndsWith("todo.md", settings.TodoFilePath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void NewInstance_DefaultCursorInsertPressEnter_IsFalse()
-    {
-        var settings = new AppSettings();
-        Assert.False(settings.CursorInsertPressEnter);
-    }
-
-    [Fact]
-    public void SaveThenLoad_PreservesTodFilePath()
-    {
-        var path     = @"C:\Users\Test\notes\todo.md";
-        var original = new AppSettings { TodoFilePath = path };
-        original.Save(TempFile);
-
-        var loaded = AppSettings.Load(TempFile);
-        Assert.Equal(path, loaded.TodoFilePath);
-    }
-
-    [Fact]
-    public void SaveThenLoad_PreservesCursorInsertPressEnter()
-    {
-        var original = new AppSettings { CursorInsertPressEnter = true };
-        original.Save(TempFile);
-
-        var loaded = AppSettings.Load(TempFile);
-        Assert.True(loaded.CursorInsertPressEnter);
+        Assert.Empty(settings.OutputSettings);
     }
 
     [Fact]

@@ -240,6 +240,8 @@ public sealed class RecorderServiceTests : IDisposable
 
         public string DisplayName => "spy";
 
+        public IOutputSettings SettingsPage { get; } = new StubSettingsPage("spy");
+
         public int CallCount { get; private set; }
 
         public TranscriptionResult? LastResult { get; private set; }
@@ -258,8 +260,21 @@ public sealed class RecorderServiceTests : IDisposable
 
         public string DisplayName => "fail";
 
+        public IOutputSettings SettingsPage { get; } = new StubSettingsPage("fail");
+
         public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>
             throw new InvalidOperationException("Output failed");
+    }
+
+    private sealed class StubSettingsPage(string id) : IOutputSettings
+    {
+        public string Id => id;
+        public string DisplayName => id;
+        public string TabTitle => id;
+        public string Description => id;
+        public System.Windows.FrameworkElement View => new System.Windows.Controls.Grid();
+        public void Load(AppSettings settings, OutputSettingsAdapter adapter) { }
+        public void Save(AppSettings settings, OutputSettingsAdapter adapter) { }
     }
 
     private sealed class FakeAudioRecorder : IAudioRecorder

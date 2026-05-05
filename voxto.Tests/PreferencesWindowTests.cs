@@ -32,7 +32,7 @@ public class PreferencesWindowTests
         var headers = RunInSta(() =>
         {
             using var updateService = new UpdateService(new AppSettings());
-            var window = new PreferencesWindow(new AppSettings(), new OutputSettingsManager(), updateService);
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
             var tabs = (TabControl)window.FindName("PreferencesTabs");
 
             return tabs.Items
@@ -42,7 +42,7 @@ public class PreferencesWindowTests
         });
 
         Assert.Equal(
-            ["General", "Markdown files", "Todo list", "Cursor location", "About"],
+            ["General", "Markdown", "Todo", "Cursor", "About"],
             headers);
     }
 
@@ -52,7 +52,7 @@ public class PreferencesWindowTests
         var layout = RunInSta(() =>
         {
             using var updateService = new UpdateService(new AppSettings());
-            var window = new PreferencesWindow(new AppSettings(), new OutputSettingsManager(), updateService);
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
             var tabs = (TabControl)window.FindName("PreferencesTabs");
             var aboutIndex = tabs.Items
                 .OfType<TabItem>()
@@ -66,6 +66,26 @@ public class PreferencesWindowTests
 
         Assert.Equal(5, layout.Count);
         Assert.Equal(4, layout.AboutIndex);
+    }
+
+    [Fact]
+    public void BuildSettings_PreservesEnabledOutputsWithoutSettingsPage()
+    {
+        var enabledOutputs = RunInSta(() =>
+        {
+            var current = new AppSettings
+            {
+                EnabledOutputs = ["MarkdownFile", "ExperimentalOutput"]
+            };
+
+            using var updateService = new UpdateService(current);
+            var window = new PreferencesWindow(current, new OutputManager(), updateService);
+            var method = typeof(PreferencesWindow).GetMethod("BuildSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var result = Assert.IsType<AppSettings>(method!.Invoke(window, null));
+            return result.EnabledOutputs.ToArray();
+        });
+
+        Assert.Contains("ExperimentalOutput", enabledOutputs);
     }
 
     private static T RunInSta<T>(Func<T> action)

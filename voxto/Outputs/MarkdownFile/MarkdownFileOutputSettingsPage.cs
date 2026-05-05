@@ -1,10 +1,8 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using Button = System.Windows.Controls.Button;
 using TextBox = System.Windows.Controls.TextBox;
-using WpfColor = System.Windows.Media.Color;
 
 namespace Voxto;
 
@@ -17,12 +15,14 @@ internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<Ma
         FontSize = 13
     };
 
-    public override string OutputId => MarkdownFileOutput.OutputId;
-
-    public override string TabTitle => "Markdown files";
-
-    protected override string Description =>
-        "Create one Markdown file per recording and choose where those files are saved.";
+    public MarkdownFileOutputSettingsPage()
+        : base(
+            id: "MarkdownFile",
+            displayName: "Markdown files (one per recording)",
+            tabTitle: "Markdown",
+            description: "Create one Markdown file per recording and choose where those files are saved.")
+    {
+    }
 
     protected override FrameworkElement BuildEditor()
     {
@@ -49,25 +49,11 @@ internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<Ma
         return stack;
     }
 
-    protected override MarkdownFileOutputSettings CreateDefaultSettings() => new();
-
-    protected override MarkdownFileOutputSettings MigrateLegacySettings(AppSettings settings) => new()
-    {
-        OutputFolder = string.IsNullOrWhiteSpace(settings.OutputFolder)
-            ? new MarkdownFileOutputSettings().OutputFolder
-            : settings.OutputFolder
-    };
-
-    protected override void LoadSettings(MarkdownFileOutputSettings settings) =>
+    protected override void ReadSettings(MarkdownFileOutputSettings settings) =>
         _outputFolderBox.Text = settings.OutputFolder;
 
-    protected override MarkdownFileOutputSettings CollectSettings() => new()
-    {
-        OutputFolder = _outputFolderBox.Text.Trim()
-    };
-
-    protected override void SyncLegacySettings(AppSettings settings, MarkdownFileOutputSettings outputSettings) =>
-        settings.OutputFolder = outputSettings.OutputFolder;
+    protected override void WriteSettings(MarkdownFileOutputSettings settings) =>
+        settings.OutputFolder = _outputFolderBox.Text.Trim();
 
     private void OnBrowseOutputFolder(object? sender, RoutedEventArgs e)
     {
@@ -82,21 +68,4 @@ internal sealed class MarkdownFileOutputSettingsPage : OutputSettingsPageBase<Ma
             _outputFolderBox.Text = dialog.SelectedPath;
     }
 
-    private static FrameworkElement CreateLabel(string text) => new TextBlock
-    {
-        Text = text,
-        Margin = new Thickness(0, 0, 0, 8),
-        FontSize = 13,
-        FontWeight = FontWeights.SemiBold,
-        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x37, 0x41, 0x51))
-    };
-
-    private static FrameworkElement CreateHint(string text) => new TextBlock
-    {
-        Text = text,
-        Margin = new Thickness(0, 10, 0, 0),
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x6B, 0x72, 0x80)),
-        LineHeight = 20
-    };
 }

@@ -13,26 +13,25 @@ internal sealed class CursorInsertOutput : ITranscriptionOutput
     public const string OutputId = "CursorInsert";
 
     private readonly ICursorTextSender _textSender;
+    private IOutputSettings? _settingsPage;
 
     public CursorInsertOutput()
         : this(new SendInputCursorTextSender())
     {
     }
 
-    internal CursorInsertOutput(ICursorTextSender textSender) => _textSender = textSender;
+    internal CursorInsertOutput(ICursorTextSender textSender)
+    {
+        _textSender = textSender;
+    }
 
-    public string Id          => OutputId;
+    public string Id => OutputId;
     public string DisplayName => "Insert at cursor location";
+    public IOutputSettings SettingsPage => _settingsPage ??= new CursorInsertOutputSettingsPage();
 
     public Task WriteAsync(TranscriptionResult result, AppSettings settings)
     {
-        var outputSettings = new OutputSettingsAdapter(settings).Get(
-            OutputId,
-            defaultFactory: static () => new CursorInsertOutputSettings(),
-            legacyFactory: static appSettings => new CursorInsertOutputSettings
-            {
-                PressEnterAfterInsert = appSettings.CursorInsertPressEnter
-            });
+        var outputSettings = new OutputSettingsAdapter(settings).Get<CursorInsertOutputSettings>(Id);
 
         var text = result.FullText;
         if (string.IsNullOrWhiteSpace(text))

@@ -1,10 +1,8 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using Button = System.Windows.Controls.Button;
 using TextBox = System.Windows.Controls.TextBox;
-using WpfColor = System.Windows.Media.Color;
 
 namespace Voxto;
 
@@ -17,12 +15,14 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
         FontSize = 13
     };
 
-    public override string OutputId => TodoAppendOutput.OutputId;
-
-    public override string TabTitle => "Todo list";
-
-    protected override string Description =>
-        "Append each transcription as a new unchecked task inside one shared Markdown file.";
+    public TodoAppendOutputSettingsPage()
+        : base(
+            id: "TodoAppend",
+            displayName: "Todo list (append to single file)",
+            tabTitle: "Todo",
+            description: "Append each transcription as a new unchecked task inside one shared Markdown file.")
+    {
+    }
 
     protected override FrameworkElement BuildEditor()
     {
@@ -49,25 +49,11 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
         return stack;
     }
 
-    protected override TodoAppendOutputSettings CreateDefaultSettings() => new();
-
-    protected override TodoAppendOutputSettings MigrateLegacySettings(AppSettings settings) => new()
-    {
-        TodoFilePath = string.IsNullOrWhiteSpace(settings.TodoFilePath)
-            ? new TodoAppendOutputSettings().TodoFilePath
-            : settings.TodoFilePath
-    };
-
-    protected override void LoadSettings(TodoAppendOutputSettings settings) =>
+    protected override void ReadSettings(TodoAppendOutputSettings settings) =>
         _todoFileBox.Text = settings.TodoFilePath;
 
-    protected override TodoAppendOutputSettings CollectSettings() => new()
-    {
-        TodoFilePath = _todoFileBox.Text.Trim()
-    };
-
-    protected override void SyncLegacySettings(AppSettings settings, TodoAppendOutputSettings outputSettings) =>
-        settings.TodoFilePath = outputSettings.TodoFilePath;
+    protected override void WriteSettings(TodoAppendOutputSettings settings) =>
+        settings.TodoFilePath = _todoFileBox.Text.Trim();
 
     private void OnBrowseTodoFile(object? sender, RoutedEventArgs e)
     {
@@ -85,21 +71,4 @@ internal sealed class TodoAppendOutputSettingsPage : OutputSettingsPageBase<Todo
             _todoFileBox.Text = dialog.FileName;
     }
 
-    private static FrameworkElement CreateLabel(string text) => new TextBlock
-    {
-        Text = text,
-        Margin = new Thickness(0, 0, 0, 8),
-        FontSize = 13,
-        FontWeight = FontWeights.SemiBold,
-        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x37, 0x41, 0x51))
-    };
-
-    private static FrameworkElement CreateHint(string text) => new TextBlock
-    {
-        Text = text,
-        Margin = new Thickness(0, 10, 0, 0),
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x6B, 0x72, 0x80)),
-        LineHeight = 20
-    };
 }

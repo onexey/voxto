@@ -6,7 +6,8 @@ namespace Voxto;
 /// <see cref="AppSettings.EnabledOutputs"/>.
 /// <para>
 /// To add a new output: create a class that implements <see cref="ITranscriptionOutput"/>
-/// and add an instance to the array in the constructor — nothing else needs to change.
+/// and add an instance to the array in the constructor. Preferences discovers the
+/// output's tab via <see cref="ITranscriptionOutput.SettingsPage"/>.
 /// </para>
 /// </summary>
 public sealed class OutputManager
@@ -35,6 +36,9 @@ public sealed class OutputManager
 
     /// <summary>All registered outputs, in the order they will be executed.</summary>
     public IReadOnlyList<ITranscriptionOutput> All => _all;
+
+    /// <summary>All registered output settings pages, in the same order as the outputs.</summary>
+    internal IReadOnlyList<IOutputSettings> AllSettingsPages => _all.Select(output => output.SettingsPage).ToArray();
 
     /// <summary>
     /// Runs every output whose ID appears in <see cref="AppSettings.EnabledOutputs"/>.

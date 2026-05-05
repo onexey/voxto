@@ -47,7 +47,6 @@ public class CursorInsertOutputTests
     {
         var settings = new AppSettings
         {
-            CursorInsertPressEnter = false,
             OutputSettings =
             {
                 [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
@@ -74,7 +73,16 @@ public class CursorInsertOutputTests
             ]
         };
 
-        await _output.WriteAsync(result, new AppSettings { CursorInsertPressEnter = true });
+        await _output.WriteAsync(result, new AppSettings
+        {
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        });
 
         Assert.Equal(0, _sender.CallCount);
         Assert.Null(_sender.LastText);
@@ -100,6 +108,13 @@ public class CursorInsertOutputTests
 
     [Fact]
     public void Id_UsesSharedOutputIdConstant() => Assert.Equal(CursorInsertOutput.OutputId, _output.Id);
+
+    [Fact]
+    public void SettingsPage_IdMatchesOutputId()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal(_output.Id, pageId);
+    }
 
     [Fact]
     public void BuildFailureMessage_IncludesSentExpectedAndWin32Error()
@@ -190,5 +205,32 @@ public class CursorInsertOutputTests
             LastText = text;
             LastPressEnter = pressEnter;
         }
+    }
+
+    private static T RunInSta<T>(Func<T> action)
+    {
+        T? result = default;
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = action();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        Assert.True(completed, "The STA test thread did not complete within 30 seconds.");
+        if (capturedException is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(capturedException).Throw();
+
+        return result!;
     }
 }

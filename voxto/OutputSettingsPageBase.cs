@@ -11,12 +11,87 @@ namespace Voxto;
 /// Shared scaffold for output settings tabs.
 /// </summary>
 internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
+    where TSettings : class, new()
 {
-    private readonly FrameworkElement _view;
-    private readonly CheckBox _enabledCheck;
-    private readonly Border _contentHost;
+    private readonly string _id;
+    private readonly string _displayName;
+    private readonly string _tabTitle;
+    private readonly string _description;
+    private FrameworkElement? _view;
+    private CheckBox? _enabledCheck;
+    private Border? _contentHost;
+    private TSettings _settings = new();
 
-    protected OutputSettingsPageBase()
+    protected OutputSettingsPageBase(string id, string displayName, string tabTitle, string description)
+    {
+        _id = id;
+        _displayName = displayName;
+        _tabTitle = tabTitle;
+        _description = description;
+    }
+
+    public string Id => _id;
+
+    public string DisplayName => _displayName;
+
+    public string TabTitle => _tabTitle;
+
+    public string Description => _description;
+
+    public FrameworkElement View => _view ??= BuildView();
+
+    public void Load(AppSettings settings, OutputSettingsAdapter adapter)
+    {
+        EnsureView();
+        _enabledCheck!.IsChecked = settings.EnabledOutputs.Contains(Id);
+        _settings = adapter.Get<TSettings>(Id);
+        ReadSettings(_settings);
+        UpdateContentState();
+    }
+
+    public void Save(AppSettings settings, OutputSettingsAdapter adapter)
+    {
+        EnsureView();
+
+        if (_enabledCheck!.IsChecked == true)
+        {
+            if (!settings.EnabledOutputs.Contains(Id))
+                settings.EnabledOutputs.Add(Id);
+        }
+        else
+        {
+            settings.EnabledOutputs.RemoveAll(outputId => outputId == Id);
+        }
+
+        WriteSettings(_settings);
+        adapter.Set(Id, _settings);
+    }
+
+    protected abstract FrameworkElement BuildEditor();
+
+    protected abstract void ReadSettings(TSettings settings);
+
+    protected abstract void WriteSettings(TSettings settings);
+
+    protected FrameworkElement CreateLabel(string text) => new TextBlock
+    {
+        Text = text,
+        Margin = new Thickness(0, 0, 0, 8),
+        FontSize = 13,
+        FontWeight = FontWeights.SemiBold,
+        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x37, 0x41, 0x51))
+    };
+
+    protected FrameworkElement CreateHint(string text) => new TextBlock
+    {
+        Text = text,
+        Margin = new Thickness(0, 10, 0, 0),
+        TextWrapping = TextWrapping.Wrap,
+        Foreground = new SolidColorBrush(WpfColor.FromRgb(0x6B, 0x72, 0x80)),
+        LineHeight = 20
+    };
+
+    private FrameworkElement BuildView()
     {
         _enabledCheck = new CheckBox
         {
@@ -39,57 +114,6 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
             BorderThickness = new Thickness(1)
         };
 
-        _view = BuildView();
-    }
-
-    public abstract string OutputId { get; }
-
-    public abstract string TabTitle { get; }
-
-    public FrameworkElement View => _view;
-
-    public void Load(AppSettings settings, OutputSettingsAdapter adapter)
-    {
-        _enabledCheck.IsChecked = settings.EnabledOutputs.Contains(OutputId);
-        LoadSettings(adapter.Get(OutputId, CreateDefaultSettings, legacyFactory: MigrateLegacySettings));
-        UpdateContentState();
-    }
-
-    public void Save(AppSettings settings, OutputSettingsAdapter adapter)
-    {
-        if (_enabledCheck.IsChecked == true)
-        {
-            if (!settings.EnabledOutputs.Contains(OutputId))
-                settings.EnabledOutputs.Add(OutputId);
-        }
-        else
-        {
-            settings.EnabledOutputs.RemoveAll(id => id == OutputId);
-        }
-
-        var outputSettings = CollectSettings();
-        adapter.Set(OutputId, outputSettings);
-        SyncLegacySettings(settings, outputSettings);
-    }
-
-    protected abstract string Description { get; }
-
-    protected abstract FrameworkElement BuildEditor();
-
-    protected abstract TSettings CreateDefaultSettings();
-
-    protected abstract TSettings MigrateLegacySettings(AppSettings settings);
-
-    protected abstract void LoadSettings(TSettings settings);
-
-    protected abstract TSettings CollectSettings();
-
-    protected virtual void SyncLegacySettings(AppSettings settings, TSettings outputSettings)
-    {
-    }
-
-    private FrameworkElement BuildView()
-    {
         var stack = new StackPanel
         {
             Margin = new Thickness(24, 20, 24, 28)
@@ -125,7 +149,15 @@ internal abstract class OutputSettingsPageBase<TSettings> : IOutputSettings
 
     private void UpdateContentState()
     {
+        if (_contentHost is null || _enabledCheck is null)
+            return;
+
         _contentHost.IsEnabled = _enabledCheck.IsChecked == true;
         _contentHost.Opacity = _enabledCheck.IsChecked == true ? 1 : 0.55;
+    }
+
+    private void EnsureView()
+    {
+        _ = View;
     }
 }

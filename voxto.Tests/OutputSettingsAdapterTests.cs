@@ -16,26 +16,20 @@ public class OutputSettingsAdapterTests
         });
         var adapter = new OutputSettingsAdapter(appSettings);
 
-        var settings = adapter.Get("MarkdownFile", static () => new MarkdownFileOutputSettings());
+        var settings = adapter.Get<MarkdownFileOutputSettings>("MarkdownFile");
 
         Assert.Equal(@"C:\Archive", settings.OutputFolder);
     }
 
     [Fact]
-    public void Get_MissingConfiguration_UsesLegacyFactory()
+    public void Get_MissingConfiguration_ReturnsDefaultSettings()
     {
-        var appSettings = new AppSettings
-        {
-            OutputFolder = @"C:\Legacy"
-        };
+        var appSettings = new AppSettings();
         var adapter = new OutputSettingsAdapter(appSettings);
 
-        var settings = adapter.Get(
-            "MarkdownFile",
-            static () => new MarkdownFileOutputSettings(),
-            static value => new MarkdownFileOutputSettings { OutputFolder = value.OutputFolder });
+        var settings = adapter.Get<MarkdownFileOutputSettings>("MarkdownFile");
 
-        Assert.Equal(@"C:\Legacy", settings.OutputFolder);
+        Assert.EndsWith("Voxto", settings.OutputFolder);
     }
 
     [Fact]
@@ -50,7 +44,7 @@ public class OutputSettingsAdapterTests
         };
         var adapter = new OutputSettingsAdapter(appSettings);
 
-        var settings = adapter.Get("CursorInsert", static () => new CursorInsertOutputSettings());
+        var settings = adapter.Get<CursorInsertOutputSettings>("CursorInsert");
 
         Assert.False(settings.PressEnterAfterInsert);
     }

@@ -18,6 +18,11 @@ public interface ITranscriptionOutput
     string DisplayName { get; }
 
     /// <summary>
+    /// Self-contained settings page used by Preferences to configure this output.
+    /// </summary>
+    IOutputSettings SettingsPage { get; }
+
+    /// <summary>
     /// Writes (or appends) the transcription to the output destination.
     /// Implementations should be idempotent where possible.
     /// </summary>
