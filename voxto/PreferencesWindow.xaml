@@ -342,18 +342,21 @@
                                 <StackPanel VerticalAlignment="Top"
                                             HorizontalAlignment="Center"
                                             MaxWidth="420">
-                                <Border Width="88"
-                                        Height="88"
-                                        CornerRadius="44"
-                                        Background="{StaticResource AccentBrushSoft}"
-                                        BorderBrush="{StaticResource AccentBorderBrush}"
-                                        BorderThickness="1"
-                                        Padding="12"
-                                        HorizontalAlignment="Center">
-                                    <Image Source="pack://application:,,,/voxto;component/Assets/icons/png/ready/voxto-ready-64.png"
-                                           Stretch="Uniform"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
+                                <Viewbox x:Name="AboutLogo"
+                                         Width="88"
+                                         Height="88"
+                                         HorizontalAlignment="Center"
+                                         Stretch="Uniform">
+                                    <Canvas Width="64" Height="64">
+                                        <Path Fill="#3DB36A"
+                                              Data="M14,10 H50 A8,8 0 0 1 58,18 V40 A8,8 0 0 1 50,48 H30 L21,56 V48 H14 A8,8 0 0 1 6,40 V18 A8,8 0 0 1 14,10 Z"/>
+                                        <Rectangle Width="4" Height="22" RadiusX="2" RadiusY="2" Fill="White" Canvas.Left="16" Canvas.Top="18"/>
+                                        <Rectangle Width="4" Height="14" RadiusX="2" RadiusY="2" Fill="White" Canvas.Left="23" Canvas.Top="22"/>
+                                        <Rectangle Width="4" Height="8" RadiusX="2" RadiusY="2" Fill="White" Canvas.Left="30" Canvas.Top="25"/>
+                                        <Rectangle Width="4" Height="14" RadiusX="2" RadiusY="2" Fill="White" Canvas.Left="37" Canvas.Top="22"/>
+                                        <Rectangle Width="4" Height="22" RadiusX="2" RadiusY="2" Fill="White" Canvas.Left="44" Canvas.Top="18"/>
+                                    </Canvas>
+                                </Viewbox>
 
                                 <TextBlock Text="Voxto"
                                            Margin="0,20,0,0"
