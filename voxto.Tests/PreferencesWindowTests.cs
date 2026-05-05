@@ -3,10 +3,10 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Shapes;
+using System.Windows.Media.Imaging;
 using Voxto;
 using Border = System.Windows.Controls.Border;
-using ShapeRectangle = System.Windows.Shapes.Rectangle;
+using WpfImage = System.Windows.Controls.Image;
 using Xunit;
 using TabControl = System.Windows.Controls.TabControl;
 
@@ -175,22 +175,18 @@ public class PreferencesWindowTests
     }
 
     [Fact]
-    public void AboutTab_UsesMasterLogoMarkupInsteadOfBadgeImage()
+    public void AboutTab_UsesReadyPngResource()
     {
-        var logoLayout = RunInSta(() =>
+        var logoSource = RunInSta(() =>
         {
             using var updateService = new UpdateService(new AppSettings());
             var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
-            var logo = Assert.IsType<Viewbox>(window.FindName("AboutLogo"));
-            var canvas = Assert.IsType<Canvas>(logo.Child);
-
-            return (
-                HasSpeechBubble: canvas.Children.OfType<Path>().Any(),
-                BarCount: canvas.Children.OfType<ShapeRectangle>().Count());
+            var logo = Assert.IsType<WpfImage>(window.FindName("AboutLogo"));
+            var source = Assert.IsAssignableFrom<BitmapSource>(logo.Source);
+            return source.ToString();
         });
 
-        Assert.True(logoLayout.HasSpeechBubble);
-        Assert.Equal(5, logoLayout.BarCount);
+        Assert.Contains("voxto-ready-128.png", logoSource);
     }
 
     private static T RunInSta<T>(Func<T> action)
