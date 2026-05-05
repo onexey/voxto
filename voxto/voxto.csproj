@@ -48,6 +48,8 @@
     <Resource Include="Assets\icons\png\ready\voxto-ready-32.png" />
     <Resource Include="Assets\icons\png\recording\voxto-recording-32.png" />
     <Resource Include="Assets\icons\png\transcribing\voxto-transcribing-32.png" />
+    <!-- 128-px PNG used in the About tab -->
+    <Resource Include="Assets\icons\png\ready\voxto-ready-128.png" />
     <!-- Source SVGs kept in the repo for reference / future tooling -->
     <None Include="Assets\icons\master\**\*" />
     <None Include="Assets\icons\tray-16\**\*" />

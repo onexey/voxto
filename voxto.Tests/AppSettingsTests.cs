@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -42,13 +43,6 @@ public class AppSettingsTests : IDisposable
         Assert.Equal(0x78, settings.HotkeyVirtualKey);
     }
 
-    [Fact]
-    public void NewInstance_DefaultOutputFolder_EndsWithVoxto()
-    {
-        var settings = new AppSettings();
-        Assert.EndsWith("Voxto", settings.OutputFolder, StringComparison.OrdinalIgnoreCase);
-    }
-
     // ── Load with no file ─────────────────────────────────────────────────────
 
     [Fact]
@@ -79,17 +73,6 @@ public class AppSettingsTests : IDisposable
 
         var loaded = AppSettings.Load(TempFile);
         Assert.Equal(HotkeyMode.PushToTalk, loaded.HotkeyMode);
-    }
-
-    [Fact]
-    public void SaveThenLoad_PreservesOutputFolder()
-    {
-        var path = @"C:\Users\Test\Recordings";
-        var original = new AppSettings { OutputFolder = path };
-        original.Save(TempFile);
-
-        var loaded = AppSettings.Load(TempFile);
-        Assert.Equal(path, loaded.OutputFolder);
     }
 
     [Fact]
@@ -185,41 +168,55 @@ public class AppSettingsTests : IDisposable
         Assert.Empty(loaded.EnabledOutputs);
     }
 
-    // ── TodoFilePath ──────────────────────────────────────────────────────────
+    // ── OutputSettings ────────────────────────────────────────────────────────
 
     [Fact]
-    public void NewInstance_DefaultTodoFilePath_EndsWithTodoMd()
+    public void NewInstance_DefaultOutputSettings_IsEmpty()
     {
         var settings = new AppSettings();
-        Assert.EndsWith("todo.md", settings.TodoFilePath, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(settings.OutputSettings);
     }
 
     [Fact]
-    public void NewInstance_DefaultCursorInsertPressEnter_IsFalse()
+    public void SaveThenLoad_PreservesOutputSettings()
     {
-        var settings = new AppSettings();
-        Assert.False(settings.CursorInsertPressEnter);
-    }
-
-    [Fact]
-    public void SaveThenLoad_PreservesTodFilePath()
-    {
-        var path     = @"C:\Users\Test\notes\todo.md";
-        var original = new AppSettings { TodoFilePath = path };
+        var original = new AppSettings();
+        original.OutputSettings["MarkdownFile"] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+        {
+            OutputFolder = @"C:\Users\Test\Archive"
+        });
         original.Save(TempFile);
 
         var loaded = AppSettings.Load(TempFile);
-        Assert.Equal(path, loaded.TodoFilePath);
+        var settings = loaded.OutputSettings["MarkdownFile"].Deserialize<MarkdownFileOutputSettings>();
+
+        Assert.NotNull(settings);
+        Assert.Equal(@"C:\Users\Test\Archive", settings.OutputFolder);
     }
 
     [Fact]
-    public void SaveThenLoad_PreservesCursorInsertPressEnter()
+    public void CopyConstructor_DeepCopiesCollections()
     {
-        var original = new AppSettings { CursorInsertPressEnter = true };
-        original.Save(TempFile);
+        var original = new AppSettings
+        {
+            ModelType = "Medium",
+            EnabledOutputs = ["MarkdownFile", "TodoAppend"],
+            OutputSettings =
+            {
+                ["CursorInsert"] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
 
-        var loaded = AppSettings.Load(TempFile);
-        Assert.True(loaded.CursorInsertPressEnter);
+        var copy = new AppSettings(original);
+        original.EnabledOutputs.Clear();
+        original.OutputSettings.Clear();
+
+        Assert.Equal("Medium", copy.ModelType);
+        Assert.Equal(["MarkdownFile", "TodoAppend"], copy.EnabledOutputs);
+        Assert.True(copy.OutputSettings["CursorInsert"].Deserialize<CursorInsertOutputSettings>()!.PressEnterAfterInsert);
     }
 
     [Fact]

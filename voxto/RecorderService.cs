@@ -15,6 +15,7 @@ namespace Voxto;
 public class RecorderService : IDisposable
 {
     private static readonly TimeSpan RecordingStoppedTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MinimumTranscribableAudioDuration = TimeSpan.FromMilliseconds(500);
 
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
@@ -159,6 +160,13 @@ public class RecorderService : IDisposable
     {
         try
         {
+            if (!TryValidateRecordedAudio(wavPath, MinimumTranscribableAudioDuration, out var validationFailure))
+            {
+                Log.Warning("Transcription skipped: {Reason}", validationFailure);
+                TranscriptionFailed?.Invoke(validationFailure);
+                return;
+            }
+
             var result = await TranscribeAsync(wavPath);
             await WriteOutputsAsync(result);
             TranscriptionCompleted?.Invoke();
@@ -186,6 +194,27 @@ public class RecorderService : IDisposable
                     _tempWavPath = null;
             }
         }
+    }
+
+    internal static bool TryValidateRecordedAudio(string wavPath, TimeSpan minimumDuration, out string failureMessage)
+    {
+        try
+        {
+            using var reader = new WaveFileReader(wavPath);
+            if (reader.Length <= 0 || reader.TotalTime < minimumDuration)
+            {
+                failureMessage = "Recording was too short. Hold the hotkey a little longer and try again.";
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is InvalidDataException || ex is FormatException)
+        {
+            failureMessage = "Recorded audio could not be read. Please try again.";
+            return false;
+        }
+
+        failureMessage = string.Empty;
+        return true;
     }
 
     // ── Transcription ────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 using Voxto;
 using Xunit;
+using System.Text.Json;
 
 namespace Voxto.Tests;
 
@@ -23,13 +24,41 @@ public class CursorInsertOutputTests
     [Fact]
     public async Task WriteAsync_PressEnterEnabled_SendsEnterAfterText()
     {
-        var settings = new AppSettings { CursorInsertPressEnter = true };
+        var settings = new AppSettings
+        {
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
 
         await _output.WriteAsync(Result("Run it"), settings);
 
         Assert.Equal("Run it", _sender.LastText);
         Assert.True(_sender.LastPressEnter);
         Assert.Equal(1, _sender.CallCount);
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesStoredSettingsOverLegacyProperty()
+    {
+        var settings = new AppSettings
+        {
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result("Configured"), settings);
+
+        Assert.True(_sender.LastPressEnter);
     }
 
     [Fact]
@@ -44,7 +73,16 @@ public class CursorInsertOutputTests
             ]
         };
 
-        await _output.WriteAsync(result, new AppSettings { CursorInsertPressEnter = true });
+        await _output.WriteAsync(result, new AppSettings
+        {
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        });
 
         Assert.Equal(0, _sender.CallCount);
         Assert.Null(_sender.LastText);
@@ -63,13 +101,25 @@ public class CursorInsertOutputTests
     }
 
     [Fact]
-    public void Id_IsCursorInsert() => Assert.Equal("CursorInsert", _output.Id);
+    public void SettingsPage_IdIsCursorInsert()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal("CursorInsert", pageId);
+    }
 
     [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+    public void SettingsPage_IdMatchesOutputId()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal(CursorInsertOutput.OutputId, pageId);
+    }
 
     [Fact]
-    public void Id_UsesSharedOutputIdConstant() => Assert.Equal(CursorInsertOutput.OutputId, _output.Id);
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
+    }
 
     [Fact]
     public void BuildFailureMessage_IncludesSentExpectedAndWin32Error()
@@ -160,5 +210,32 @@ public class CursorInsertOutputTests
             LastText = text;
             LastPressEnter = pressEnter;
         }
+    }
+
+    private static T RunInSta<T>(Func<T> action)
+    {
+        T? result = default;
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = action();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        Assert.True(completed, "The STA test thread did not complete within 30 seconds.");
+        if (capturedException is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(capturedException).Throw();
+
+        return result!;
     }
 }

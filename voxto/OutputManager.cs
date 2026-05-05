@@ -2,16 +2,18 @@ namespace Voxto;
 
 /// <summary>
 /// Registry of all available <see cref="ITranscriptionOutput"/> implementations.
-/// Runs every output whose <see cref="ITranscriptionOutput.Id"/> is listed in
+/// Runs every output whose <see cref="IOutputSettings.Id"/> is listed in
 /// <see cref="AppSettings.EnabledOutputs"/>.
 /// <para>
 /// To add a new output: create a class that implements <see cref="ITranscriptionOutput"/>
-/// and add an instance to the array in the constructor — nothing else needs to change.
+/// and add an instance to the array in the constructor. Preferences discovers the
+/// output's tab via <see cref="ITranscriptionOutput.SettingsPage"/>.
 /// </para>
 /// </summary>
 public sealed class OutputManager
 {
     private readonly IReadOnlyList<ITranscriptionOutput> _all;
+    private readonly IReadOnlyList<IOutputSettings> _allSettingsPages;
 
     public OutputManager()
     {
@@ -22,6 +24,7 @@ public sealed class OutputManager
             new CursorInsertOutput(),
             // ← register future outputs here
         };
+        _allSettingsPages = _all.Select(output => output.SettingsPage).ToArray();
     }
 
     /// <summary>
@@ -31,14 +34,18 @@ public sealed class OutputManager
     internal OutputManager(params ITranscriptionOutput[] outputs)
     {
         _all = outputs;
+        _allSettingsPages = _all.Select(output => output.SettingsPage).ToArray();
     }
 
     /// <summary>All registered outputs, in the order they will be executed.</summary>
     public IReadOnlyList<ITranscriptionOutput> All => _all;
 
+    /// <summary>All registered output settings pages, in the same order as the outputs.</summary>
+    internal IReadOnlyList<IOutputSettings> AllSettingsPages => _allSettingsPages;
+
     /// <summary>
-    /// Runs every output whose ID appears in <see cref="AppSettings.EnabledOutputs"/>.
-    /// Failures from individual outputs are collected and re-thrown as an
+     /// Runs every output whose ID appears in <see cref="AppSettings.EnabledOutputs"/>.
+     /// Failures from individual outputs are collected and re-thrown as an
     /// <see cref="AggregateException"/> after all outputs have been attempted,
     /// so a single failing output never silently blocks the others.
     /// </summary>
@@ -48,7 +55,7 @@ public sealed class OutputManager
 
         foreach (var output in _all)
         {
-            if (!settings.EnabledOutputs.Contains(output.Id))
+            if (!settings.EnabledOutputs.Contains(output.SettingsPage.Id))
                 continue;
 
             try
@@ -57,7 +64,7 @@ public sealed class OutputManager
             }
             catch (Exception ex)
             {
-                errors.Add(new Exception($"[{output.DisplayName}] {ex.Message}", ex));
+                errors.Add(new Exception($"[{output.SettingsPage.DisplayName}] {ex.Message}", ex));
             }
         }
 

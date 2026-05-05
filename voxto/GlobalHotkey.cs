@@ -24,6 +24,7 @@ public class GlobalHotkey : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_KEYUP = 0x0101;
     private const int HOTKEY_ID = 9000;
+    private const uint MOD_NOREPEAT = 0x4000;
 
     private readonly HotkeyMode _mode;
     private readonly int _virtualKey;
@@ -82,7 +83,7 @@ public class GlobalHotkey : IDisposable
         _hwndSource = HwndSource.FromHwnd(helper.Handle);
         _hwndSource.AddHook(WndProc);
 
-        RegisterHotKey(helper.Handle, HOTKEY_ID, 0, (uint)_virtualKey);
+        RegisterHotKey(helper.Handle, HOTKEY_ID, GetRegistrationModifiers(_mode), (uint)_virtualKey);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -145,4 +146,7 @@ public class GlobalHotkey : IDisposable
                 UnhookWindowsHookEx(_hookHandle);
         }
     }
+
+    internal static uint GetRegistrationModifiers(HotkeyMode mode) =>
+        mode == HotkeyMode.Toggle ? MOD_NOREPEAT : 0;
 }

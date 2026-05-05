@@ -31,16 +31,20 @@ voxto/
 │   ├── RecorderService.cs    # audio capture + Whisper transcription
 │   ├── OutputManager.cs      # routes results to all enabled ITranscriptionOutput
 │   ├── ITranscriptionOutput.cs
-│   ├── CursorInsertOutput.cs # inserts transcription into the active cursor location
-│   ├── MarkdownFileOutput.cs # one .md file per recording
-│   ├── TodoAppendOutput.cs   # appends [ ] task line to a single .md file
+│   ├── IOutputSettings.cs    # contract for self-contained output settings tabs
+│   ├── Outputs/
+│   │   ├── CursorInsert/     # cursor output add-on (output + typed settings + preferences tab)
+│   │   ├── MarkdownFile/     # markdown file output add-on (output + typed settings + preferences tab)
+│   │   └── TodoAppend/       # todo output add-on (output + typed settings + preferences tab)
 │   ├── TranscriptionResult.cs
 │   ├── AppSettings.cs        # JSON settings in %LocalAppData%\Voxto\settings.json
 │   ├── DisposableResourceCache.cs # reusable keyed cache for disposable resources
 │   ├── MarkdownFormatter.cs  # pure formatting helper (no I/O)
 │   ├── GlobalHotkey.cs       # Win32 hotkey + low-level keyboard hook
 │   ├── OverlayWindow.xaml/.cs # always-on-top pill notification
-│   ├── PreferencesWindow.xaml/.cs # full settings UI (two tabs: General + About)
+│   ├── OutputSettingsAdapter.cs # reads/writes typed per-output config blobs
+│   ├── OutputSettingsPageBase.cs # shared UI scaffold for output settings tabs
+│   ├── PreferencesWindow.xaml/.cs # modern settings UI with General, auto-discovered output tabs, and About tabs
 │   ├── StartupManager.cs     # HKCU run-at-startup registry helper
 │   └── UpdateService.cs      # GitHub Releases update checker + downloader + installer
 ├── installer/                # WiX v5 MSI installer project
@@ -54,16 +58,20 @@ voxto/
 │   ├── MarkdownFileOutputTests.cs
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
+│   ├── OutputSettingsAdapterTests.cs
 │   ├── OverlayWindowTests.cs
 │   ├── DisposableResourceCacheTests.cs
 │   ├── CursorInsertOutputTests.cs
+│   ├── GlobalHotkeyTests.cs
 │   ├── RecorderServiceTests.cs
 │   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck
 ├── docs/                     # detailed documentation (one file per feature/topic)
 │   ├── auto-update.md        # auto-update flow, security model, preferences
+│   ├── images/               # screenshots and static documentation assets
 │   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
 │   ├── outputs.md            # output targets and their configuration
+│   ├── preferences.md        # preferences tabs and isolated output settings
 │   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
@@ -114,7 +122,7 @@ All other content (architecture details, output formats, configuration reference
 - Async methods are suffixed `Async`. Fire-and-forget tray handlers use `async void` (acceptable for event handlers only).
 - Prefer `using` declarations over `using` blocks where lifetime is clear.
 - Comments should add non-obvious context, rationale, or constraints; do not restate what the code already makes clear.
-- `ITranscriptionOutput` is the extension point for new output formats — implement the interface and register the instance in `OutputManager()`. No other file needs to change.
+- `ITranscriptionOutput` is the extension point for new output formats — implement the interface, provide its `SettingsPage`, and register the instance in `OutputManager()`. No other file needs to change.
 
 ## Documentation style
 
@@ -154,6 +162,6 @@ Use Serilog's static `Log` class. Levels:
 
 1. Create `voxto/<Name>Output.cs` implementing `ITranscriptionOutput`.
 2. Register an instance in `OutputManager()`.
-3. If the output needs user configuration, add properties to `AppSettings` and expose them in `PreferencesWindow` (General tab).
+3. If the output needs user configuration, add a typed settings model, create an `IOutputSettings` implementation next to the output, and return it from the output's `SettingsPage` property.
 4. Write tests in `voxto.Tests/<Name>OutputTests.cs`.
 5. Document the output in `docs/outputs.md`.

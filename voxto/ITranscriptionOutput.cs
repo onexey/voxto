@@ -9,13 +9,9 @@ namespace Voxto;
 public interface ITranscriptionOutput
 {
     /// <summary>
-    /// Stable identifier stored in <see cref="AppSettings.EnabledOutputs"/>.
-    /// Must be unique across all registered outputs. Never change after shipping.
-    /// </summary>
-    string Id { get; }
-
-    /// <summary>Human-readable label shown in the tray Output submenu.</summary>
-    string DisplayName { get; }
+     /// Self-contained settings page used by Preferences to configure this output.
+     /// </summary>
+    IOutputSettings SettingsPage { get; }
 
     /// <summary>
     /// Writes (or appends) the transcription to the output destination.

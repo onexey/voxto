@@ -69,6 +69,7 @@ Settings are saved to:
 ## Documentation
 
 - [Output targets](docs/outputs.md)
+- [Preferences](docs/preferences.md)
 - [Auto-update](docs/auto-update.md)
 - [Installer](docs/installer.md)
 - [Transcription performance](docs/transcription-performance.md)

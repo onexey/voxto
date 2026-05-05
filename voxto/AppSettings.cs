@@ -33,16 +33,14 @@ public enum UpdateCheckInterval
 /// </summary>
 public class AppSettings
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true
+    };
+
     internal static readonly string DefaultSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Voxto", "settings.json");
-
-    /// <summary>
-    /// Folder where transcription Markdown files are saved.
-    /// Defaults to <c>Documents\Voxto</c>.
-    /// </summary>
-    public string OutputFolder { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto");
 
     /// <summary>
     /// Whisper model to use for transcription.
@@ -61,23 +59,15 @@ public class AppSettings
     public int HotkeyVirtualKey { get; set; } = 0x78;
 
     /// <summary>
-    /// IDs of the <see cref="ITranscriptionOutput"/> implementations that are currently enabled.
+    /// IDs of the <see cref="IOutputSettings"/> add-ons that are currently enabled.
     /// Defaults to <c>["MarkdownFile"]</c> (one file per recording).
     /// </summary>
     public List<string> EnabledOutputs { get; set; } = ["MarkdownFile"];
 
     /// <summary>
-    /// Path of the single Markdown file used by the Todo output.
-    /// Defaults to <c>Documents\Voxto\todo.md</c>.
+    /// Per-output configuration blobs keyed by <see cref="IOutputSettings.Id"/>.
     /// </summary>
-    public string TodoFilePath { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Voxto", "todo.md");
-
-    /// <summary>
-    /// Whether the cursor insertion output should press Enter after inserting text.
-    /// Defaults to <c>false</c>.
-    /// </summary>
-    public bool CursorInsertPressEnter { get; set; }
+    public Dictionary<string, JsonElement> OutputSettings { get; set; } = [];
 
     // ── Auto-update ───────────────────────────────────────────────────────────
 
@@ -106,6 +96,31 @@ public class AppSettings
     public DateTime? LastUpdateCheck { get; set; }
 
     /// <summary>
+    /// Creates a deep copy of persisted settings values.
+    /// </summary>
+    public AppSettings(AppSettings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        ModelType = other.ModelType;
+        HotkeyMode = other.HotkeyMode;
+        HotkeyVirtualKey = other.HotkeyVirtualKey;
+        EnabledOutputs = [.. other.EnabledOutputs];
+        OutputSettings = other.OutputSettings.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Clone(),
+            StringComparer.Ordinal);
+        AutoUpdateEnabled = other.AutoUpdateEnabled;
+        AutoDownloadInstallRestartEnabled = other.AutoDownloadInstallRestartEnabled;
+        UpdateCheckInterval = other.UpdateCheckInterval;
+        LastUpdateCheck = other.LastUpdateCheck;
+    }
+
+    public AppSettings()
+    {
+    }
+
+    /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.
     /// </summary>
     /// <param name="path">
@@ -120,7 +135,7 @@ public class AppSettings
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
-                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
             }
         }
         catch { /* fall through to defaults */ }
@@ -138,7 +153,7 @@ public class AppSettings
     {
         var settingsPath = path ?? DefaultSettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(this, SerializerOptions);
         File.WriteAllText(settingsPath, json);
     }
 }

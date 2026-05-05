@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -19,7 +20,16 @@ public class TodoAppendOutputTests : IDisposable
             Directory.Delete(_tempDir, recursive: true);
     }
 
-    private AppSettings Settings() => new() { TodoFilePath = TodoFile };
+    private AppSettings Settings() => new()
+    {
+        OutputSettings =
+        {
+            ["TodoAppend"] = JsonSerializer.SerializeToElement(new TodoAppendOutputSettings
+            {
+                TodoFilePath = TodoFile
+            })
+        }
+    };
 
     private static TranscriptionResult Result(string text, DateTime? timestamp = null) =>
         new()
@@ -155,17 +165,92 @@ public class TodoAppendOutputTests : IDisposable
     {
         var settings = new AppSettings
         {
-            TodoFilePath = Path.Combine(_tempDir, "nested", "deep", "todo.md")
+            OutputSettings =
+            {
+                ["TodoAppend"] = JsonSerializer.SerializeToElement(new TodoAppendOutputSettings
+                {
+                    TodoFilePath = Path.Combine(_tempDir, "nested", "deep", "todo.md")
+                })
+            }
         };
         await _output.WriteAsync(Result("Task"), settings);
-        Assert.True(File.Exists(settings.TodoFilePath));
+        Assert.True(File.Exists(Path.Combine(_tempDir, "nested", "deep", "todo.md")));
     }
 
-    // ── ITranscriptionOutput contract ─────────────────────────────────────────
+    [Fact]
+    public async Task WriteAsync_UsesStoredOutputSettingsWhenPresent()
+    {
+        var configuredFile = Path.Combine(_tempDir, "configured", "todo.md");
+        var settings = new AppSettings
+        {
+            OutputSettings =
+            {
+                ["TodoAppend"] = JsonSerializer.SerializeToElement(new TodoAppendOutputSettings
+                {
+                    TodoFilePath = configuredFile
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result("Task"), settings);
+
+        Assert.True(File.Exists(configuredFile));
+    }
+
+    // ── Settings page metadata ────────────────────────────────────────────────
 
     [Fact]
-    public void Id_IsTodoAppend()    => Assert.Equal("TodoAppend", _output.Id);
+    public void SettingsPage_IdMatchesOutputId()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal("TodoAppend", pageId);
+    }
 
     [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
+    }
+
+    [Fact]
+    public void GetDialogFileName_NullPath_ReturnsEmptyString()
+    {
+        Assert.Equal(string.Empty, TodoAppendOutputSettingsPage.GetDialogFileName(null));
+    }
+
+    [Fact]
+    public void GetDialogInitialDirectory_EmptyPath_FallsBackToDocuments()
+    {
+        var expected = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        Assert.Equal(expected, TodoAppendOutputSettingsPage.GetDialogInitialDirectory(string.Empty));
+    }
+
+    private static T RunInSta<T>(Func<T> action)
+    {
+        T? result = default;
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = action();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        Assert.True(completed, "The STA test thread did not complete within 30 seconds.");
+        if (capturedException is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(capturedException).Throw();
+
+        return result!;
+    }
 }

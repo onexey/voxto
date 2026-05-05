@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -17,7 +18,16 @@ public class MarkdownFileOutputTests : IDisposable
             Directory.Delete(_tempDir, recursive: true);
     }
 
-    private AppSettings Settings() => new() { OutputFolder = _tempDir };
+    private AppSettings Settings() => new()
+    {
+        OutputSettings =
+        {
+            ["MarkdownFile"] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+            {
+                OutputFolder = _tempDir
+            })
+        }
+    };
 
     private static TranscriptionResult Result(DateTime? timestamp = null) =>
         new()
@@ -107,22 +117,83 @@ public class MarkdownFileOutputTests : IDisposable
     {
         var settings = new AppSettings
         {
-            OutputFolder = Path.Combine(_tempDir, "nested", "output")
+            OutputSettings =
+            {
+                ["MarkdownFile"] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+                {
+                    OutputFolder = Path.Combine(_tempDir, "nested", "output")
+                })
+            }
         };
 
         await _output.WriteAsync(Result(), settings);
 
-        Assert.True(Directory.Exists(settings.OutputFolder));
+        Assert.True(Directory.Exists(Path.Combine(_tempDir, "nested", "output")));
     }
 
-    // ── ITranscriptionOutput contract ─────────────────────────────────────────
+    [Fact]
+    public async Task WriteAsync_UsesStoredOutputSettingsWhenPresent()
+    {
+        var settings = new AppSettings
+        {
+            OutputSettings =
+            {
+                ["MarkdownFile"] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+                {
+                    OutputFolder = Path.Combine(_tempDir, "configured")
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result(), settings);
+
+        Assert.Single(Directory.GetFiles(Path.Combine(_tempDir, "configured"), "*.md"));
+        Assert.False(Directory.Exists(Path.Combine(_tempDir, "legacy")));
+    }
+
+    // ── Settings page metadata ────────────────────────────────────────────────
 
     [Fact]
-    public void Id_IsMarkdownFile() => Assert.Equal("MarkdownFile", _output.Id);
+    public void SettingsPage_IdMatchesOutputId()
+    {
+        var pageId = RunInSta(() => _output.SettingsPage.Id);
+        Assert.Equal("MarkdownFile", pageId);
+    }
 
     [Fact]
-    public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));
+    public void SettingsPage_DisplayName_IsNotEmpty()
+    {
+        var displayName = RunInSta(() => _output.SettingsPage.DisplayName);
+        Assert.False(string.IsNullOrWhiteSpace(displayName));
+    }
 
     private static string NormalizeLineEndings(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private static T RunInSta<T>(Func<T> action)
+    {
+        T? result = default;
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = action();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var completed = thread.Join(TimeSpan.FromSeconds(30));
+        Assert.True(completed, "The STA test thread did not complete within 30 seconds.");
+        if (capturedException is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(capturedException).Throw();
+
+        return result!;
+    }
 }

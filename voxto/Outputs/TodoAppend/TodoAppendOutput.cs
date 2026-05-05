@@ -9,12 +9,13 @@ namespace Voxto;
 /// </summary>
 internal sealed class TodoAppendOutput : ITranscriptionOutput
 {
-    public string Id          => "TodoAppend";
-    public string DisplayName => "Todo list (append to single file)";
+    public IOutputSettings SettingsPage { get; } = new TodoAppendOutputSettingsPage();
 
     public async Task WriteAsync(TranscriptionResult result, AppSettings settings)
     {
-        var path = settings.TodoFilePath;
+        var outputSettings = new OutputSettingsAdapter(settings).Get<TodoAppendOutputSettings>(SettingsPage.Id);
+
+        var path = outputSettings.TodoFilePath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         var date = result.Timestamp.ToString("dd.MM.yyyy HH:mm");

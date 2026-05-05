@@ -129,12 +129,37 @@ public class OutputManagerTests
         Assert.Contains(manager.All, output => output is CursorInsertOutput);
     }
 
+    [Fact]
+    public void AllSettingsPages_ReturnsSettingsPagesFromOutputs()
+    {
+        var manager = new OutputManager(new SpyOutput("a"), new SpyOutput("b"));
+
+        Assert.Equal(["a", "b"], manager.AllSettingsPages.Select(page => page.Id).ToArray());
+    }
+
+    [Fact]
+    public void DefaultConstructor_SettingsPageIdsAreUnique()
+    {
+        var manager = new OutputManager();
+
+        Assert.Equal(
+            manager.AllSettingsPages.Count,
+            manager.AllSettingsPages.Select(page => page.Id).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void AllSettingsPages_IsCachedPerManagerInstance()
+    {
+        var manager = new OutputManager(new SpyOutput("a"));
+
+        Assert.Same(manager.AllSettingsPages, manager.AllSettingsPages);
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class SpyOutput(string id) : ITranscriptionOutput
     {
-        public string Id          => id;
-        public string DisplayName => id;
+        public IOutputSettings SettingsPage { get; } = new StubSettingsPage(id);
         public int    CallCount   { get; private set; }
 
         public Task WriteAsync(TranscriptionResult result, AppSettings settings)
@@ -146,10 +171,20 @@ public class OutputManagerTests
 
     private sealed class FailingOutput(string id) : ITranscriptionOutput
     {
-        public string Id          => id;
-        public string DisplayName => id;
+        public IOutputSettings SettingsPage { get; } = new StubSettingsPage(id);
 
         public Task WriteAsync(TranscriptionResult result, AppSettings settings) =>
             throw new InvalidOperationException($"Output '{id}' intentionally failed");
+    }
+
+    private sealed class StubSettingsPage(string id) : IOutputSettings
+    {
+        public string Id => id;
+        public string DisplayName => id;
+        public string TabTitle => id;
+        public string Description => id;
+        public System.Windows.FrameworkElement View => new System.Windows.Controls.Grid();
+        public void Load(AppSettings settings, OutputSettingsAdapter adapter) { }
+        public void Save(AppSettings settings, OutputSettingsAdapter adapter) { }
     }
 }
