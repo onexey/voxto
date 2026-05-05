@@ -136,6 +136,7 @@ public sealed class RecorderServiceTests : IDisposable
             () => recorder);
 
         await service.StartRecordingAsync();
+        recorder.RaiseDataAvailable(new byte[20000]);
 
         var stopTask = service.StopAndTranscribeAsync();
 
@@ -227,10 +228,38 @@ public sealed class RecorderServiceTests : IDisposable
         Assert.Equal(1, recorder.StopRecordingCallCount);
     }
 
-    private string CreateTempAudioFile()
+    [Fact]
+    public async Task TranscribeFileAsync_WhenRecordingIsTooShort_RaisesFriendlyFailureWithoutTranscribing()
+    {
+        var transcribeCalled = false;
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ =>
+            {
+                transcribeCalled = true;
+                return Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]);
+            });
+        var audioPath = CreateTempAudioFile(TimeSpan.FromMilliseconds(150));
+        string? failureMessage = null;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+
+        await service.TranscribeFileAsync(audioPath, deleteAfterTranscribe: true);
+
+        Assert.Equal("Recording was too short. Hold the hotkey a little longer and try again.", failureMessage);
+        Assert.False(transcribeCalled);
+        Assert.False(File.Exists(audioPath));
+    }
+
+    private string CreateTempAudioFile(TimeSpan? duration = null)
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.wav");
-        File.WriteAllBytes(path, [1, 2, 3]);
+        using var writer = new WaveFileWriter(path, new WaveFormat(16000, 16, 1));
+        var byteCount = (int)Math.Max(
+            writer.WaveFormat.BlockAlign,
+            (duration ?? TimeSpan.FromSeconds(1)).TotalSeconds * writer.WaveFormat.AverageBytesPerSecond);
+        writer.Write(new byte[byteCount], 0, byteCount);
         return path;
     }
 

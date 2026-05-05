@@ -62,6 +62,7 @@ voxto/
 │   ├── OverlayWindowTests.cs
 │   ├── DisposableResourceCacheTests.cs
 │   ├── CursorInsertOutputTests.cs
+│   ├── GlobalHotkeyTests.cs
 │   ├── RecorderServiceTests.cs
 │   ├── TrayIconTest.cs
 │   └── UpdateServiceTests.cs # ParseVersionFromTag, VerifySha256, IsDueForCheck

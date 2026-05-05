@@ -171,7 +171,7 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Padding" Value="4,10,4,12"/>
-            <Setter Property="Margin" Value="0,0,20,0"/>
+            <Setter Property="Margin" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
@@ -181,6 +181,7 @@
                                 <RowDefinition Height="3"/>
                             </Grid.RowDefinitions>
                             <Border x:Name="TabFocusBorder"
+                                    Margin="0,0,20,0"
                                     Padding="{TemplateBinding Padding}"
                                     CornerRadius="8"
                                     BorderThickness="1"
@@ -192,7 +193,7 @@
                             </Border>
                             <Border x:Name="TabUnderline"
                                     Grid.Row="1"
-                                    Margin="0,2,0,0"
+                                    Margin="0,2,20,0"
                                     CornerRadius="2"
                                     Background="Transparent"/>
                         </Grid>
@@ -335,8 +336,12 @@
                     </TabItem>
 
                     <TabItem Header="About">
-                        <Grid Margin="32">
-                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <Grid Margin="32">
+                                <StackPanel VerticalAlignment="Top"
+                                            HorizontalAlignment="Center"
+                                            MaxWidth="420">
                                 <Border Width="88"
                                         Height="88"
                                         CornerRadius="44"
@@ -389,8 +394,9 @@
                                         View source on GitHub
                                     </Hyperlink>
                                 </TextBlock>
-                            </StackPanel>
-                        </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
                     </TabItem>
                 </TabControl>
 

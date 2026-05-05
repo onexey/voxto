@@ -123,6 +123,55 @@ public class PreferencesWindowTests
         Assert.True(hasFocusBorder);
     }
 
+    [Fact]
+    public void Constructor_TabHeadersSizeToTheirText()
+    {
+        var widthsAreSufficient = RunInSta(() =>
+        {
+            using var updateService = new UpdateService(new AppSettings());
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService)
+            {
+                Left = -10000,
+                Top = 0,
+                ShowInTaskbar = false,
+                ShowActivated = false
+            };
+
+            window.Show();
+            window.UpdateLayout();
+
+            try
+            {
+                var tabs = (TabControl)window.FindName("PreferencesTabs");
+                return tabs.Items
+                    .OfType<TabItem>()
+                    .All(tab => tab.ActualWidth >= tab.DesiredSize.Width - 1);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.True(widthsAreSufficient);
+    }
+
+    [Fact]
+    public void AboutTab_UsesScrollViewerForFullContentVisibility()
+    {
+        var usesScrollViewer = RunInSta(() =>
+        {
+            using var updateService = new UpdateService(new AppSettings());
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
+            var tabs = (TabControl)window.FindName("PreferencesTabs");
+            var aboutTab = tabs.Items.OfType<TabItem>().Single(item => Equals(item.Header, "About"));
+
+            return aboutTab.Content is ScrollViewer;
+        });
+
+        Assert.True(usesScrollViewer);
+    }
+
     private static T RunInSta<T>(Func<T> action)
     {
         T? result = default;
