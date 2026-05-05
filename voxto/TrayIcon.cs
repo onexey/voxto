@@ -22,6 +22,7 @@ public class TrayIcon : IDisposable
     private readonly NotifyIcon      _notifyIcon;
     private readonly RecorderService _recorder;
     private readonly OutputManager   _outputManager;
+    private readonly OutputSettingsManager _outputSettingsManager;
     private readonly UpdateService   _updateService;
     private readonly SingleOpenWindowGate<PreferencesWindow> _preferencesWindowGate = new();
     private AppSettings _settings;
@@ -60,6 +61,7 @@ public class TrayIcon : IDisposable
     {
         _settings      = AppSettings.Load();
         _outputManager = new OutputManager();
+        _outputSettingsManager = new OutputSettingsManager();
         _recorder      = new RecorderService(_settings, _outputManager);
         _updateService = new UpdateService(_settings);
 
@@ -297,7 +299,7 @@ public class TrayIcon : IDisposable
 
     private void OnPreferences(object? sender, EventArgs e)
     {
-        var win = new PreferencesWindow(_settings, _outputManager, _updateService);
+        var win = new PreferencesWindow(_settings, _outputSettingsManager, _updateService);
         if (!TryUseSingleOpenWindow(_preferencesWindowGate, win, BringWindowToFront))
             return;
 

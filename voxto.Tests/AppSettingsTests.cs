@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -220,6 +221,39 @@ public class AppSettingsTests : IDisposable
 
         var loaded = AppSettings.Load(TempFile);
         Assert.True(loaded.CursorInsertPressEnter);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesOutputSettings()
+    {
+        var original = new AppSettings();
+        original.OutputSettings["MarkdownFile"] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+        {
+            OutputFolder = @"C:\Users\Test\Archive"
+        });
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        var settings = loaded.OutputSettings["MarkdownFile"].Deserialize<MarkdownFileOutputSettings>();
+
+        Assert.NotNull(settings);
+        Assert.Equal(@"C:\Users\Test\Archive", settings.OutputFolder);
+    }
+
+    [Fact]
+    public void Clone_PreservesOutputSettings()
+    {
+        var original = new AppSettings();
+        original.OutputSettings["CursorInsert"] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+        {
+            PressEnterAfterInsert = true
+        });
+
+        var clone = original.Clone();
+        var settings = clone.OutputSettings["CursorInsert"].Deserialize<CursorInsertOutputSettings>();
+
+        Assert.NotNull(settings);
+        Assert.True(settings.PressEnterAfterInsert);
     }
 
     [Fact]

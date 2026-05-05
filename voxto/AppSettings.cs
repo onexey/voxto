@@ -33,6 +33,11 @@ public enum UpdateCheckInterval
 /// </summary>
 public class AppSettings
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true
+    };
+
     internal static readonly string DefaultSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Voxto", "settings.json");
@@ -65,6 +70,11 @@ public class AppSettings
     /// Defaults to <c>["MarkdownFile"]</c> (one file per recording).
     /// </summary>
     public List<string> EnabledOutputs { get; set; } = ["MarkdownFile"];
+
+    /// <summary>
+    /// Per-output configuration blobs keyed by <see cref="ITranscriptionOutput.Id"/>.
+    /// </summary>
+    public Dictionary<string, JsonElement> OutputSettings { get; set; } = [];
 
     /// <summary>
     /// Path of the single Markdown file used by the Todo output.
@@ -105,6 +115,12 @@ public class AppSettings
     /// </summary>
     public DateTime? LastUpdateCheck { get; set; }
 
+    internal AppSettings Clone()
+    {
+        var json = JsonSerializer.Serialize(this, SerializerOptions);
+        return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
+    }
+
     /// <summary>
     /// Loads settings from disk, returning defaults if the file does not exist or cannot be parsed.
     /// </summary>
@@ -120,7 +136,7 @@ public class AppSettings
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
-                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
             }
         }
         catch { /* fall through to defaults */ }
@@ -138,7 +154,7 @@ public class AppSettings
     {
         var settingsPath = path ?? DefaultSettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(this, SerializerOptions);
         File.WriteAllText(settingsPath, json);
     }
 }

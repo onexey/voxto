@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -113,6 +114,27 @@ public class MarkdownFileOutputTests : IDisposable
         await _output.WriteAsync(Result(), settings);
 
         Assert.True(Directory.Exists(settings.OutputFolder));
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesStoredOutputSettingsWhenPresent()
+    {
+        var settings = new AppSettings
+        {
+            OutputFolder = Path.Combine(_tempDir, "legacy"),
+            OutputSettings =
+            {
+                [MarkdownFileOutput.OutputId] = JsonSerializer.SerializeToElement(new MarkdownFileOutputSettings
+                {
+                    OutputFolder = Path.Combine(_tempDir, "configured")
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result(), settings);
+
+        Assert.Single(Directory.GetFiles(Path.Combine(_tempDir, "configured"), "*.md"));
+        Assert.False(Directory.Exists(Path.Combine(_tempDir, "legacy")));
     }
 
     // ── ITranscriptionOutput contract ─────────────────────────────────────────

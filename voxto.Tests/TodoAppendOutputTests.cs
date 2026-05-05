@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Xunit;
 using Voxto;
 
@@ -161,10 +162,32 @@ public class TodoAppendOutputTests : IDisposable
         Assert.True(File.Exists(settings.TodoFilePath));
     }
 
+    [Fact]
+    public async Task WriteAsync_UsesStoredOutputSettingsWhenPresent()
+    {
+        var configuredFile = Path.Combine(_tempDir, "configured", "todo.md");
+        var settings = new AppSettings
+        {
+            TodoFilePath = Path.Combine(_tempDir, "legacy", "todo.md"),
+            OutputSettings =
+            {
+                [TodoAppendOutput.OutputId] = JsonSerializer.SerializeToElement(new TodoAppendOutputSettings
+                {
+                    TodoFilePath = configuredFile
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result("Task"), settings);
+
+        Assert.True(File.Exists(configuredFile));
+        Assert.False(File.Exists(settings.TodoFilePath));
+    }
+
     // ── ITranscriptionOutput contract ─────────────────────────────────────────
 
     [Fact]
-    public void Id_IsTodoAppend()    => Assert.Equal("TodoAppend", _output.Id);
+    public void Id_IsTodoAppend()    => Assert.Equal(TodoAppendOutput.OutputId, _output.Id);
 
     [Fact]
     public void DisplayName_IsNotEmpty() => Assert.False(string.IsNullOrWhiteSpace(_output.DisplayName));

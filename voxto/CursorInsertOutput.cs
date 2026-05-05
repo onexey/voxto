@@ -26,11 +26,19 @@ internal sealed class CursorInsertOutput : ITranscriptionOutput
 
     public Task WriteAsync(TranscriptionResult result, AppSettings settings)
     {
+        var outputSettings = new OutputSettingsAdapter(settings).Get(
+            OutputId,
+            defaultFactory: static () => new CursorInsertOutputSettings(),
+            legacyFactory: static appSettings => new CursorInsertOutputSettings
+            {
+                PressEnterAfterInsert = appSettings.CursorInsertPressEnter
+            });
+
         var text = result.FullText;
         if (string.IsNullOrWhiteSpace(text))
             return Task.CompletedTask;
 
-        _textSender.Send(text, settings.CursorInsertPressEnter);
+        _textSender.Send(text, outputSettings.PressEnterAfterInsert);
         return Task.CompletedTask;
     }
 }

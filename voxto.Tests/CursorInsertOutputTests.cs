@@ -1,5 +1,6 @@
 using Voxto;
 using Xunit;
+using System.Text.Json;
 
 namespace Voxto.Tests;
 
@@ -23,13 +24,42 @@ public class CursorInsertOutputTests
     [Fact]
     public async Task WriteAsync_PressEnterEnabled_SendsEnterAfterText()
     {
-        var settings = new AppSettings { CursorInsertPressEnter = true };
+        var settings = new AppSettings
+        {
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
 
         await _output.WriteAsync(Result("Run it"), settings);
 
         Assert.Equal("Run it", _sender.LastText);
         Assert.True(_sender.LastPressEnter);
         Assert.Equal(1, _sender.CallCount);
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesStoredSettingsOverLegacyProperty()
+    {
+        var settings = new AppSettings
+        {
+            CursorInsertPressEnter = false,
+            OutputSettings =
+            {
+                [CursorInsertOutput.OutputId] = JsonSerializer.SerializeToElement(new CursorInsertOutputSettings
+                {
+                    PressEnterAfterInsert = true
+                })
+            }
+        };
+
+        await _output.WriteAsync(Result("Configured"), settings);
+
+        Assert.True(_sender.LastPressEnter);
     }
 
     [Fact]
