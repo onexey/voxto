@@ -31,16 +31,26 @@ voxto/
 │   ├── RecorderService.cs    # audio capture + Whisper transcription
 │   ├── OutputManager.cs      # routes results to all enabled ITranscriptionOutput
 │   ├── ITranscriptionOutput.cs
+│   ├── IOutputSettings.cs    # contract for self-contained output settings tabs
 │   ├── CursorInsertOutput.cs # inserts transcription into the active cursor location
+│   ├── CursorInsertOutputSettings.cs # typed config for cursor insertion output
+│   ├── CursorInsertOutputSettingsPage.cs # preferences tab for cursor insertion output
 │   ├── MarkdownFileOutput.cs # one .md file per recording
+│   ├── MarkdownFileOutputSettings.cs # typed config for markdown file output
+│   ├── MarkdownFileOutputSettingsPage.cs # preferences tab for markdown file output
 │   ├── TodoAppendOutput.cs   # appends [ ] task line to a single .md file
+│   ├── TodoAppendOutputSettings.cs # typed config for todo append output
+│   ├── TodoAppendOutputSettingsPage.cs # preferences tab for todo append output
 │   ├── TranscriptionResult.cs
 │   ├── AppSettings.cs        # JSON settings in %LocalAppData%\Voxto\settings.json
 │   ├── DisposableResourceCache.cs # reusable keyed cache for disposable resources
 │   ├── MarkdownFormatter.cs  # pure formatting helper (no I/O)
 │   ├── GlobalHotkey.cs       # Win32 hotkey + low-level keyboard hook
 │   ├── OverlayWindow.xaml/.cs # always-on-top pill notification
-│   ├── PreferencesWindow.xaml/.cs # full settings UI (two tabs: General + About)
+│   ├── OutputSettingsAdapter.cs # reads/writes typed per-output config blobs
+│   ├── OutputSettingsManager.cs # registry of output settings tabs
+│   ├── OutputSettingsPageBase.cs # shared UI scaffold for output settings tabs
+│   ├── PreferencesWindow.xaml/.cs # modern settings UI with General, output, and About tabs
 │   ├── StartupManager.cs     # HKCU run-at-startup registry helper
 │   └── UpdateService.cs      # GitHub Releases update checker + downloader + installer
 ├── installer/                # WiX v5 MSI installer project
@@ -54,6 +64,8 @@ voxto/
 │   ├── MarkdownFileOutputTests.cs
 │   ├── InstallerConfigurationTests.cs
 │   ├── OutputManagerTests.cs
+│   ├── OutputSettingsAdapterTests.cs
+│   ├── OutputSettingsManagerTests.cs
 │   ├── OverlayWindowTests.cs
 │   ├── DisposableResourceCacheTests.cs
 │   ├── CursorInsertOutputTests.cs
@@ -64,6 +76,7 @@ voxto/
 │   ├── auto-update.md        # auto-update flow, security model, preferences
 │   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
 │   ├── outputs.md            # output targets and their configuration
+│   ├── preferences.md        # preferences tabs and isolated output settings
 │   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
@@ -154,6 +167,6 @@ Use Serilog's static `Log` class. Levels:
 
 1. Create `voxto/<Name>Output.cs` implementing `ITranscriptionOutput`.
 2. Register an instance in `OutputManager()`.
-3. If the output needs user configuration, add properties to `AppSettings` and expose them in `PreferencesWindow` (General tab).
+3. If the output needs user configuration, add a typed settings model, create an `IOutputSettings` implementation, and register it in `OutputSettingsManager`.
 4. Write tests in `voxto.Tests/<Name>OutputTests.cs`.
 5. Document the output in `docs/outputs.md`.
