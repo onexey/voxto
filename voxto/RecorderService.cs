@@ -19,7 +19,7 @@ public class RecorderService : IDisposable
 
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
-    private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
+    private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>>? _transcribeSegmentsAsync;
     private readonly Func<IAudioRecorder> _audioRecorderFactory;
     private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
     private readonly object _recordingStateSync = new();
@@ -31,24 +31,35 @@ public class RecorderService : IDisposable
     private string? _tempWavPath;
     private RecordingCaptureState _recordingState;
     private string? _activeRecordingTrigger;
+    private long _activeCaptureId;
+    private long _nextCaptureId;
     private int _recordingFailureHandled;
     private TaskCompletionSource<StoppedEventArgs>? _recordingStoppedSource;
 
-    /// <summary>Raised when all enabled outputs have been written successfully.</summary>
-    public event Action? TranscriptionCompleted;
+    /// <summary>Raised when all enabled outputs have been written successfully; argument is the originating capture id.</summary>
+    public event Action<long>? TranscriptionCompleted;
 
-    /// <summary>Raised when transcription or any output fails; argument is the error message.</summary>
-    public event Action<string>? TranscriptionFailed;
+    /// <summary>Raised when transcription or any output fails; arguments are the originating capture id and error message.</summary>
+    public event Action<long, string>? TranscriptionFailed;
 
     /// <summary>
     /// Raised just before a model file is downloaded for the first time.
-    /// The argument is the human-readable model name (e.g. <c>"Small"</c>).
+    /// The arguments are the originating capture id and human-readable model name (e.g. <c>"Small"</c>).
     /// Not raised on subsequent runs when the cached file already exists.
     /// </summary>
-    public event Action<string>? ModelDownloadStarted;
+    public event Action<long, string>? ModelDownloadStarted;
 
-    /// <summary>Raised once the model file has finished downloading.</summary>
-    public event Action? ModelDownloadFinished;
+    /// <summary>Raised once the model file has finished downloading; argument is the originating capture id.</summary>
+    public event Action<long>? ModelDownloadFinished;
+
+    internal long ActiveCaptureId
+    {
+        get
+        {
+            lock (_recordingStateSync)
+                return _activeCaptureId;
+        }
+    }
 
     /// <summary>Initialises the service with the provided settings and output pipeline.</summary>
     public RecorderService(AppSettings settings, OutputManager outputManager)
@@ -65,7 +76,7 @@ public class RecorderService : IDisposable
     {
         _settings      = settings;
         _outputManager = outputManager;
-        _transcribeSegmentsAsync = transcribeSegmentsAsync ?? TranscribeSegmentsAsync;
+        _transcribeSegmentsAsync = transcribeSegmentsAsync;
         _audioRecorderFactory = audioRecorderFactory ?? CreateAudioRecorder;
         _recordingStoppedTimeout = recordingStoppedTimeout ?? RecordingStoppedTimeout;
     }
@@ -77,8 +88,12 @@ public class RecorderService : IDisposable
 
     /// <summary>
     /// Starts capturing audio from the default microphone at 16 kHz mono (the format Whisper expects).
-    /// Does nothing if recording is already in progress.
+    /// Returns <see langword="true"/> when microphone capture starts for the supplied
+    /// <paramref name="trigger"/>, or <see langword="false"/> when the request is ignored
+    /// or startup fails because another capture transition is already in progress.
     /// </summary>
+    /// <param name="trigger">Human-readable source of the capture request, used for diagnostics.</param>
+    /// <returns><see langword="true"/> when microphone capture begins; otherwise <see langword="false"/>.</returns>
     public Task<bool> StartRecordingAsync(string trigger = "unknown")
     {
         lock (_recordingStateSync)
@@ -94,6 +109,7 @@ public class RecorderService : IDisposable
 
             _recordingState = RecordingCaptureState.Recording;
             _activeRecordingTrigger = trigger;
+            _activeCaptureId = Interlocked.Increment(ref _nextCaptureId);
             _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
             _recordingFailureHandled = 0;
             _recordingStoppedSource = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -118,13 +134,22 @@ public class RecorderService : IDisposable
     }
 
     /// <summary>
-    /// Stops recording, runs Whisper transcription, and forwards the result to all enabled outputs.
-    /// Raises either <see cref="TranscriptionCompleted"/> or <see cref="TranscriptionFailed"/> when done.
+    /// Requests microphone capture to stop for the supplied <paramref name="trigger"/>.
+    /// Returns <see langword="true"/> when the stop transition is accepted and capture has
+    /// finished shutting down; transcription and output continue asynchronously afterwards and
+    /// report completion or failure through <see cref="TranscriptionCompleted"/> and
+    /// <see cref="TranscriptionFailed"/>.
     /// </summary>
+    /// <param name="trigger">Human-readable source of the stop request, used for diagnostics.</param>
+    /// <returns>
+    /// <see langword="true"/> when capture stop is accepted and recording resources are released;
+    /// otherwise <see langword="false"/>.
+    /// </returns>
     public async Task<bool> StopAndTranscribeAsync(string trigger = "unknown")
     {
         Task<StoppedEventArgs>? stoppedTask;
         string? startedBy;
+        long captureId;
         lock (_recordingStateSync)
         {
             if (_recordingState is RecordingCaptureState.Idle)
@@ -144,6 +169,7 @@ public class RecorderService : IDisposable
 
             _recordingState = RecordingCaptureState.Stopping;
             startedBy = _activeRecordingTrigger;
+            captureId = _activeCaptureId;
             stoppedTask = _recordingStoppedSource?.Task;
         }
 
@@ -193,33 +219,33 @@ public class RecorderService : IDisposable
         if (wavPath == null || !File.Exists(wavPath))
         {
             Log.Warning("Transcription skipped: no audio was captured");
-            TranscriptionFailed?.Invoke("No audio was captured.");
+            TranscriptionFailed?.Invoke(captureId, "No audio was captured.");
             return true;
         }
 
-        _ = TranscribeFileAsync(wavPath, deleteAfterTranscribe: true);
+        StartTranscription(captureId, wavPath);
         return true;
     }
 
-    internal async Task TranscribeFileAsync(string wavPath, bool deleteAfterTranscribe = false)
+    internal async Task TranscribeFileAsync(long captureId, string wavPath, bool deleteAfterTranscribe = false)
     {
         try
         {
             if (!TryValidateRecordedAudio(wavPath, MinimumTranscribableAudioDuration, out var validationFailure))
             {
                 Log.Warning("Transcription skipped: {Reason}", validationFailure);
-                TranscriptionFailed?.Invoke(validationFailure);
+                TranscriptionFailed?.Invoke(captureId, validationFailure);
                 return;
             }
 
-            var result = await TranscribeAsync(wavPath);
+            var result = await TranscribeAsync(captureId, wavPath);
             await WriteOutputsAsync(result);
-            TranscriptionCompleted?.Invoke();
+            TranscriptionCompleted?.Invoke(captureId);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Transcription failed: {Message}", ex.Message);
-            TranscriptionFailed?.Invoke(ex.Message);
+            TranscriptionFailed?.Invoke(captureId, ex.Message);
         }
         finally
         {
@@ -264,9 +290,11 @@ public class RecorderService : IDisposable
 
     // ── Transcription ────────────────────────────────────────────────────────
 
-    private async Task<TranscriptionResult> TranscribeAsync(string wavPath)
+    private async Task<TranscriptionResult> TranscribeAsync(long captureId, string wavPath)
     {
-        var segments = await _transcribeSegmentsAsync(wavPath);
+        var segments = _transcribeSegmentsAsync is null
+            ? await TranscribeSegmentsAsync(captureId, wavPath)
+            : await _transcribeSegmentsAsync(wavPath);
         Log.Information("Transcription complete ({Segments} segments)", segments.Count);
 
         return new TranscriptionResult
@@ -276,9 +304,9 @@ public class RecorderService : IDisposable
         };
     }
 
-    private async Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>> TranscribeSegmentsAsync(string wavPath)
+    private async Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>> TranscribeSegmentsAsync(long captureId, string wavPath)
     {
-        var modelPath = await EnsureModelDownloadedAsync();
+        var modelPath = await EnsureModelDownloadedAsync(captureId);
 
         return await Task.Factory.StartNew(() =>
         {
@@ -323,7 +351,7 @@ public class RecorderService : IDisposable
         }
     }
 
-    private async Task<string> EnsureModelDownloadedAsync()
+    private async Task<string> EnsureModelDownloadedAsync(long captureId)
     {
         var modelDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -345,7 +373,7 @@ public class RecorderService : IDisposable
         if (!File.Exists(modelPath))
         {
             Log.Information("Model file not found — downloading {Model}", _settings.ModelType);
-            ModelDownloadStarted?.Invoke(_settings.ModelType);
+            ModelDownloadStarted?.Invoke(captureId, _settings.ModelType);
             try
             {
                 using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ggmlType);
@@ -360,7 +388,7 @@ public class RecorderService : IDisposable
                 if (File.Exists(modelPath)) File.Delete(modelPath);
                 throw;
             }
-            ModelDownloadFinished?.Invoke();
+            ModelDownloadFinished?.Invoke(captureId);
         }
 
         return modelPath;
@@ -409,6 +437,7 @@ public class RecorderService : IDisposable
         if (Interlocked.Exchange(ref _recordingFailureHandled, 1) == 1)
             return;
 
+        var captureId = ActiveCaptureId;
         _recordingStoppedSource?.TrySetResult(new StoppedEventArgs(ex));
         var failureMessage = $"{message}: {ex.Message}";
         Log.Error(ex, "{Message}", message);
@@ -418,7 +447,25 @@ public class RecorderService : IDisposable
             _activeRecordingTrigger = null;
         }
         CleanupRecordingResources(deleteTempFile);
-        TranscriptionFailed?.Invoke(failureMessage);
+        TranscriptionFailed?.Invoke(captureId, failureMessage);
+    }
+
+    private void StartTranscription(long captureId, string wavPath)
+    {
+        var transcriptionTask = TranscribeFileAsync(captureId, wavPath, deleteAfterTranscribe: true);
+        _ = ObserveTranscriptionTaskAsync(captureId, transcriptionTask);
+    }
+
+    private static async Task ObserveTranscriptionTaskAsync(long captureId, Task transcriptionTask)
+    {
+        try
+        {
+            await transcriptionTask;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Transcription task faulted unexpectedly (captureId={CaptureId})", captureId);
+        }
     }
 
     private void TryStopRecordingAfterWriteFailure()

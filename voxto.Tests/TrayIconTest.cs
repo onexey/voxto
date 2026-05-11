@@ -85,4 +85,28 @@ public class TrayIconTest
         Assert.True(gate.TryGetExisting(out var existingWindow));
         Assert.Same(replacementWindow, existingWindow);
     }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenRecordingAndCallbackIsFromOlderCapture_ReturnsTrue()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: true, activeCaptureId: 2, callbackCaptureId: 1);
+
+        Assert.True(shouldIgnore);
+    }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenRecordingAndCallbackMatchesActiveCapture_ReturnsFalse()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: true, activeCaptureId: 2, callbackCaptureId: 2);
+
+        Assert.False(shouldIgnore);
+    }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenIdle_ReturnsFalse()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: false, activeCaptureId: 2, callbackCaptureId: 1);
+
+        Assert.False(shouldIgnore);
+    }
 }

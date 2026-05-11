@@ -30,6 +30,7 @@ public class TrayIcon : IDisposable
     private OverlayWindow? _notificationOverlay; // transient: auto-dismiss notifications
     private DispatcherTimer? _notificationTimer;
     private bool _isRecording;
+    private long _activeCaptureId;
 
     private ToolStripMenuItem _recordItem = null!;
     private ToolStripMenuItem _prefsItem  = null!;
@@ -253,6 +254,7 @@ public class TrayIcon : IDisposable
             return;
 
         _isRecording = true;
+        _activeCaptureId = _recorder.ActiveCaptureId;
         DismissNotificationPill();
 
         _overlay?.Close();
@@ -428,10 +430,13 @@ public class TrayIcon : IDisposable
 
     // ── Transcription callbacks ───────────────────────────────────────────────
 
-    private void OnTranscriptionCompleted()
+    private void OnTranscriptionCompleted(long captureId)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
             if (!_isRecording)
                 SetState();
 
@@ -439,26 +444,32 @@ public class TrayIcon : IDisposable
         });
     }
 
-    private void OnTranscriptionFailed(string error)
+    private void OnTranscriptionFailed(long captureId, string error)
     {
         Log.Error("Voxto operation failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
-            if (!_isRecording)
-            {
-                _overlay?.Close();
-                _overlay = null;
-                SetState();
-            }
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
 
-            ShowNotificationPill($"Failed: {error}", AppState.Recording, durationMs: 4000);
+            if (_isRecording)
+                _isRecording = false;
+
+            _overlay?.Close();
+            _overlay = null;
+            SetState();
+
+            ShowNotificationPill($"Failed: {error}", AppState.Ready, durationMs: 4000);
         });
     }
 
-    private void OnModelDownloadStarted(string modelName)
+    private void OnModelDownloadStarted(long captureId, string modelName)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
             if (_isRecording)
                 return;
 
@@ -471,10 +482,13 @@ public class TrayIcon : IDisposable
         });
     }
 
-    private void OnModelDownloadFinished()
+    private void OnModelDownloadFinished(long captureId)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
             if (_isRecording)
                 return;
 
@@ -483,6 +497,9 @@ public class TrayIcon : IDisposable
             SetState();
         });
     }
+
+    internal static bool ShouldIgnoreCaptureCallback(bool isRecording, long activeCaptureId, long callbackCaptureId) =>
+        isRecording && activeCaptureId != 0 && activeCaptureId != callbackCaptureId;
 
     // ── Exit ─────────────────────────────────────────────────────────────────
 
