@@ -109,4 +109,26 @@ public class TrayIconTest
 
         Assert.False(shouldIgnore);
     }
+
+    [Fact]
+    public void GetUiState_WhenTranscribing_ShowsStatusWithoutBlockingStartRecording()
+    {
+        var uiState = TrayIcon.GetUiState(transcribing: true);
+
+        Assert.Equal("Voxto – Transcribing…", uiState.NotifyText);
+        Assert.Equal("▶  Start Recording", uiState.RecordItemText);
+        Assert.True(uiState.RecordItemEnabled);
+        Assert.True(uiState.PreferencesEnabled);
+    }
+
+    [Fact]
+    public void GetUiState_WhenRecording_ShowsStopActionAndDisablesPreferences()
+    {
+        var uiState = TrayIcon.GetUiState(recording: true);
+
+        Assert.Equal("Voxto – Recording…", uiState.NotifyText);
+        Assert.Equal("⏹  Stop Recording", uiState.RecordItemText);
+        Assert.True(uiState.RecordItemEnabled);
+        Assert.False(uiState.PreferencesEnabled);
+    }
 }

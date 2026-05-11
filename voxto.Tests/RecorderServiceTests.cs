@@ -259,6 +259,38 @@ public sealed class RecorderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StopAndTranscribeAsync_WhenAlreadyStopping_ReturnsTrueWithoutStoppingAgain()
+    {
+        var recorder = new FakeAudioRecorder();
+        var recordingStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new RecorderService(
+            new AppSettings { EnabledOutputs = ["spy"] },
+            new OutputManager(new SpyOutput()),
+            async _ =>
+            {
+                await recordingStopped.Task;
+                return
+                [
+                    (TimeSpan.Zero, TimeSpan.FromSeconds(1), "hello world")
+                ];
+            },
+            () => recorder);
+
+        Assert.True(await service.StartRecordingAsync("first"));
+        recorder.RaiseDataAvailable(new byte[20000]);
+
+        var firstStopTask = service.StopAndTranscribeAsync("first stop");
+        var secondStopAccepted = await service.StopAndTranscribeAsync("second stop");
+
+        recorder.RaiseRecordingStopped();
+        recordingStopped.SetResult();
+
+        Assert.True(await firstStopTask);
+        Assert.True(secondStopAccepted);
+        Assert.Equal(1, recorder.StopRecordingCallCount);
+    }
+
+    [Fact]
     public async Task TranscribeFileAsync_UsesProvidedCaptureIdForFailureEvents()
     {
         var failureRaised = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -161,10 +161,10 @@ public class RecorderService : IDisposable
             if (_recordingState is RecordingCaptureState.Stopping)
             {
                 Log.Information(
-                    "Recording stop ignored because capture is already stopping (trigger={Trigger}, startedBy={StartedBy})",
+                    "Recording stop already in progress (trigger={Trigger}, startedBy={StartedBy})",
                     trigger,
                     _activeRecordingTrigger ?? "unknown");
-                return false;
+                return true;
             }
 
             _recordingState = RecordingCaptureState.Stopping;

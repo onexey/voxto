@@ -275,7 +275,7 @@ public class TrayIcon : IDisposable
         _overlay?.Close();
         _overlay = null;
 
-        SetState();
+        SetState(transcribing: true);
     }
 
     // ── Hotkey ───────────────────────────────────────────────────────────────
@@ -547,34 +547,48 @@ public class TrayIcon : IDisposable
 
     // ── UI state ─────────────────────────────────────────────────────────────
 
+    internal static (string NotifyText, string RecordItemText, bool RecordItemEnabled, bool PreferencesEnabled) GetUiState(
+        bool recording = false,
+        bool transcribing = false)
+    {
+        if (recording)
+            return ("Voxto – Recording…", "⏹  Stop Recording", true, false);
+
+        if (transcribing)
+            return ("Voxto – Transcribing…", "▶  Start Recording", true, true);
+
+        return ("Voxto – Idle", "▶  Start Recording", true, true);
+    }
+
     private void SetState(bool recording = false, bool transcribing = false)
     {
         StopTrayAnimation();
+        var uiState = GetUiState(recording, transcribing);
 
         if (recording)
         {
             _notifyIcon.Icon    = _recordingFrames[0];
-            _notifyIcon.Text    = "Voxto – Recording…";
-            _recordItem.Text    = "⏹  Stop Recording";
-            _recordItem.Enabled = true;
-            _prefsItem.Enabled  = false;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
             StartRecordingAnimation();
         }
         else if (transcribing)
         {
             _notifyIcon.Icon    = _transcribingIcon;
-            _notifyIcon.Text    = "Voxto – Transcribing…";
-            _recordItem.Text    = "⏹  Stop Recording";
-            _recordItem.Enabled = false;
-            _prefsItem.Enabled  = true;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
         }
         else
         {
             _notifyIcon.Icon    = _readyIcon;
-            _notifyIcon.Text    = "Voxto – Idle";
-            _recordItem.Text    = "▶  Start Recording";
-            _recordItem.Enabled = true;
-            _prefsItem.Enabled  = true;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
         }
     }
 
