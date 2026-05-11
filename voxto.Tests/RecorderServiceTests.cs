@@ -153,6 +153,87 @@ public sealed class RecorderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StopAndTranscribeAsync_WhenNotRecording_IgnoresStopWithoutFailure()
+    {
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]));
+        string? failureMessage = null;
+
+        service.TranscriptionFailed += error => failureMessage = error;
+
+        var stopped = await service.StopAndTranscribeAsync();
+
+        Assert.False(stopped);
+        Assert.Null(failureMessage);
+    }
+
+    [Fact]
+    public async Task StartRecordingAsync_WhenAlreadyRecording_DoesNotStartSecondCapture()
+    {
+        var firstRecorder = new FakeAudioRecorder();
+        var secondRecorder = new FakeAudioRecorder();
+        var factoryCalls = 0;
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]),
+            () =>
+            {
+                factoryCalls++;
+                return factoryCalls == 1 ? firstRecorder : secondRecorder;
+            });
+
+        var firstStarted = await service.StartRecordingAsync("first");
+        var secondStarted = await service.StartRecordingAsync("second");
+
+        Assert.True(firstStarted);
+        Assert.False(secondStarted);
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(1, firstRecorder.StartRecordingCallCount);
+        Assert.Equal(0, secondRecorder.StartRecordingCallCount);
+    }
+
+    [Fact]
+    public async Task StopAndTranscribeAsync_AllowsNextRecordingBeforeTranscriptionCompletes()
+    {
+        var firstRecorder = new FakeAudioRecorder();
+        var secondRecorder = new FakeAudioRecorder();
+        var recorders = new Queue<FakeAudioRecorder>([firstRecorder, secondRecorder]);
+        var transcriptionStarted = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTranscription = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new RecorderService(
+            new AppSettings { EnabledOutputs = ["spy"] },
+            new OutputManager(new SpyOutput()),
+            async wavPath =>
+            {
+                transcriptionStarted.TrySetResult(wavPath);
+                await releaseTranscription.Task;
+                return
+                [
+                    (TimeSpan.Zero, TimeSpan.FromSeconds(1), "hello world")
+                ];
+            },
+            () => recorders.Dequeue());
+
+        Assert.True(await service.StartRecordingAsync("first"));
+        firstRecorder.RaiseDataAvailable(new byte[20000]);
+
+        var stopTask = service.StopAndTranscribeAsync("first stop");
+        firstRecorder.RaiseRecordingStopped();
+
+        Assert.True(await stopTask);
+        Assert.False(releaseTranscription.Task.IsCompleted);
+        await transcriptionStarted.Task;
+
+        Assert.True(await service.StartRecordingAsync("second"));
+        Assert.Equal(1, secondRecorder.StartRecordingCallCount);
+
+        releaseTranscription.SetResult();
+    }
+
+    [Fact]
     public async Task StartRecordingAsync_WhenRecordingStopsUnexpectedly_RaisesFailureAndCleansUp()
     {
         var recorder = new FakeAudioRecorder();
@@ -312,10 +393,13 @@ public sealed class RecorderServiceTests : IDisposable
 
         public bool WasDisposedBeforeRecordingStopped { get; private set; }
 
+        public int StartRecordingCallCount { get; private set; }
+
         public int StopRecordingCallCount { get; private set; }
 
         public void StartRecording()
         {
+            StartRecordingCallCount++;
         }
 
         public void StopRecording() => StopRecordingCallCount++;

@@ -87,7 +87,7 @@ public class TrayIcon : IDisposable
         };
 
         _notifyIcon.ContextMenuStrip = BuildMenu();
-        _notifyIcon.DoubleClick += (_, _) => ToggleRecording();
+        _notifyIcon.DoubleClick += (_, _) => ToggleRecording("tray icon");
 
         RegisterHotkey();
     }
@@ -221,7 +221,7 @@ public class TrayIcon : IDisposable
     {
         var menu = new ContextMenuStrip();
 
-        _recordItem = new ToolStripMenuItem("▶  Start Recording",   null, (_, _) => ToggleRecording());
+        _recordItem = new ToolStripMenuItem("▶  Start Recording",   null, (_, _) => ToggleRecording("tray menu"));
         _prefsItem  = new ToolStripMenuItem("⚙  Preferences",       null, OnPreferences);
         _updateItem = new ToolStripMenuItem("🔄  Check for Updates", null, OnCheckForUpdates)
         {
@@ -240,36 +240,40 @@ public class TrayIcon : IDisposable
 
     // ── Recording ────────────────────────────────────────────────────────────
 
-    private async void ToggleRecording()
+    private async void ToggleRecording(string trigger)
     {
-        if (!_isRecording) await StartRecording();
-        else               await StopRecording();
+        if (!_isRecording) await StartRecording(trigger);
+        else               await StopRecording(trigger);
     }
 
-    private async Task StartRecording()
+    private async Task StartRecording(string trigger)
     {
-        if (_isRecording) return;
+        var started = await _recorder.StartRecordingAsync(trigger);
+        if (!started)
+            return;
+
         _isRecording = true;
-
         DismissNotificationPill();
-        SetState(recording: true);
 
+        _overlay?.Close();
         _overlay = new OverlayWindow("Recording…", AppState.Recording);
         _overlay.Show();
 
-        await _recorder.StartRecordingAsync();
+        SetState(recording: true);
     }
 
-    private async Task StopRecording()
+    private async Task StopRecording(string trigger)
     {
-        if (!_isRecording) return;
+        var stopped = await _recorder.StopAndTranscribeAsync(trigger);
+        if (!stopped)
+            return;
+
         _isRecording = false;
 
         _overlay?.Close();
         _overlay = null;
 
-        SetState(transcribing: true);
-        await _recorder.StopAndTranscribeAsync();
+        SetState();
     }
 
     // ── Hotkey ───────────────────────────────────────────────────────────────
@@ -282,14 +286,14 @@ public class TrayIcon : IDisposable
         if (_settings.HotkeyMode == HotkeyMode.Toggle)
         {
             _hotkey.Pressed += () =>
-                Application.Current.Dispatcher.Invoke(ToggleRecording);
+                Application.Current.Dispatcher.Invoke(() => ToggleRecording("toggle hotkey"));
         }
         else
         {
             _hotkey.Pressed  += () =>
-                Application.Current.Dispatcher.Invoke(async () => await StartRecording());
+                Application.Current.Dispatcher.Invoke(async () => await StartRecording("push-to-talk hotkey press"));
             _hotkey.Released += () =>
-                Application.Current.Dispatcher.Invoke(async () => await StopRecording());
+                Application.Current.Dispatcher.Invoke(async () => await StopRecording("push-to-talk hotkey release"));
         }
     }
 
@@ -428,7 +432,9 @@ public class TrayIcon : IDisposable
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            SetState();
+            if (!_isRecording)
+                SetState();
+
             ShowNotificationPill("Transcription saved ✅", AppState.Ready, durationMs: 4000);
         });
     }
@@ -438,10 +444,13 @@ public class TrayIcon : IDisposable
         Log.Error("Voxto operation failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
-            _isRecording = false;
-            _overlay?.Close();
-            _overlay = null;
-            SetState();
+            if (!_isRecording)
+            {
+                _overlay?.Close();
+                _overlay = null;
+                SetState();
+            }
+
             ShowNotificationPill($"Failed: {error}", AppState.Recording, durationMs: 4000);
         });
     }
@@ -450,6 +459,9 @@ public class TrayIcon : IDisposable
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (_isRecording)
+                return;
+
             _notifyIcon.Icon = _transcribingIcon;
             _notifyIcon.Text = $"Voxto – Downloading {modelName} model…";
 
@@ -463,9 +475,12 @@ public class TrayIcon : IDisposable
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (_isRecording)
+                return;
+
             _overlay?.Close();
             _overlay = null;
-            SetState(transcribing: true);
+            SetState();
         });
     }
 

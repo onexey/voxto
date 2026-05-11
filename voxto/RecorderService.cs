@@ -22,13 +22,15 @@ public class RecorderService : IDisposable
     private readonly Func<string, Task<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>> _transcribeSegmentsAsync;
     private readonly Func<IAudioRecorder> _audioRecorderFactory;
     private readonly DisposableResourceCache<WhisperFactory> _whisperFactoryCache = new();
+    private readonly object _recordingStateSync = new();
     private readonly object _transcriptionSync = new();
     private readonly TimeSpan _recordingStoppedTimeout;
 
     private IAudioRecorder? _waveIn;
     private WaveFileWriter? _waveWriter;
     private string? _tempWavPath;
-    private bool _isRecording;
+    private RecordingCaptureState _recordingState;
+    private string? _activeRecordingTrigger;
     private int _recordingFailureHandled;
     private TaskCompletionSource<StoppedEventArgs>? _recordingStoppedSource;
 
@@ -77,14 +79,25 @@ public class RecorderService : IDisposable
     /// Starts capturing audio from the default microphone at 16 kHz mono (the format Whisper expects).
     /// Does nothing if recording is already in progress.
     /// </summary>
-    public Task StartRecordingAsync()
+    public Task<bool> StartRecordingAsync(string trigger = "unknown")
     {
-        if (_isRecording)
-            return Task.CompletedTask;
+        lock (_recordingStateSync)
+        {
+            if (_recordingState is not RecordingCaptureState.Idle)
+            {
+                Log.Information(
+                    "Recording start ignored because capture state is {State} (trigger={Trigger})",
+                    _recordingState,
+                    trigger);
+                return Task.FromResult(false);
+            }
 
-        _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
-        _recordingFailureHandled = 0;
-        _recordingStoppedSource = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _recordingState = RecordingCaptureState.Recording;
+            _activeRecordingTrigger = trigger;
+            _tempWavPath = Path.Combine(Path.GetTempPath(), $"whisper_{Guid.NewGuid()}.wav");
+            _recordingFailureHandled = 0;
+            _recordingStoppedSource = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
 
         try
         {
@@ -93,27 +106,46 @@ public class RecorderService : IDisposable
             _waveIn.DataAvailable += OnDataAvailable;
             _waveIn.RecordingStopped += OnRecordingStopped;
             _waveIn.StartRecording();
-            _isRecording = true;
         }
         catch (Exception ex)
         {
             HandleRecordingFailure(ex, deleteTempFile: true, "Failed to start recording");
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
-        Log.Information("Recording started (model={Model})", _settings.ModelType);
-        return Task.CompletedTask;
+        Log.Information("Recording started (trigger={Trigger}, model={Model})", trigger, _settings.ModelType);
+        return Task.FromResult(true);
     }
 
     /// <summary>
     /// Stops recording, runs Whisper transcription, and forwards the result to all enabled outputs.
     /// Raises either <see cref="TranscriptionCompleted"/> or <see cref="TranscriptionFailed"/> when done.
     /// </summary>
-    public async Task StopAndTranscribeAsync()
+    public async Task<bool> StopAndTranscribeAsync(string trigger = "unknown")
     {
-        _isRecording = false;
+        Task<StoppedEventArgs>? stoppedTask;
+        string? startedBy;
+        lock (_recordingStateSync)
+        {
+            if (_recordingState is RecordingCaptureState.Idle)
+            {
+                Log.Information("Recording stop ignored because no capture is active (trigger={Trigger})", trigger);
+                return false;
+            }
 
-        var stoppedTask = _recordingStoppedSource?.Task;
+            if (_recordingState is RecordingCaptureState.Stopping)
+            {
+                Log.Information(
+                    "Recording stop ignored because capture is already stopping (trigger={Trigger}, startedBy={StartedBy})",
+                    trigger,
+                    _activeRecordingTrigger ?? "unknown");
+                return false;
+            }
+
+            _recordingState = RecordingCaptureState.Stopping;
+            startedBy = _activeRecordingTrigger;
+            stoppedTask = _recordingStoppedSource?.Task;
+        }
 
         try
         {
@@ -122,7 +154,7 @@ public class RecorderService : IDisposable
         catch (Exception ex)
         {
             HandleRecordingFailure(ex, deleteTempFile: true, "Failed to stop recording");
-            return;
+            return false;
         }
 
         if (stoppedTask is not null)
@@ -134,26 +166,39 @@ public class RecorderService : IDisposable
                     new TimeoutException($"RecordingStopped was not raised within {_recordingStoppedTimeout.TotalSeconds:0.#} seconds."),
                     deleteTempFile: true,
                     "Timed out waiting for recording to stop");
-                return;
+                return false;
             }
 
             var stoppedArgs = await stoppedTask;
             if (stoppedArgs.Exception is not null)
-                return;
+                return false;
         }
 
         CleanupRecordingResources(deleteTempFile: false);
 
-        Log.Information("Recording stopped — starting transcription");
+        string? wavPath;
+        lock (_recordingStateSync)
+        {
+            _recordingState = RecordingCaptureState.Idle;
+            _activeRecordingTrigger = null;
+            wavPath = _tempWavPath;
+            _tempWavPath = null;
+        }
 
-        if (_tempWavPath == null || !File.Exists(_tempWavPath))
+        Log.Information(
+            "Recording stopped — starting transcription (trigger={Trigger}, startedBy={StartedBy})",
+            trigger,
+            startedBy ?? "unknown");
+
+        if (wavPath == null || !File.Exists(wavPath))
         {
             Log.Warning("Transcription skipped: no audio was captured");
             TranscriptionFailed?.Invoke("No audio was captured.");
-            return;
+            return true;
         }
 
-        await TranscribeFileAsync(_tempWavPath, deleteAfterTranscribe: true);
+        _ = TranscribeFileAsync(wavPath, deleteAfterTranscribe: true);
+        return true;
     }
 
     internal async Task TranscribeFileAsync(string wavPath, bool deleteAfterTranscribe = false)
@@ -367,7 +412,11 @@ public class RecorderService : IDisposable
         _recordingStoppedSource?.TrySetResult(new StoppedEventArgs(ex));
         var failureMessage = $"{message}: {ex.Message}";
         Log.Error(ex, "{Message}", message);
-        _isRecording = false;
+        lock (_recordingStateSync)
+        {
+            _recordingState = RecordingCaptureState.Idle;
+            _activeRecordingTrigger = null;
+        }
         CleanupRecordingResources(deleteTempFile);
         TranscriptionFailed?.Invoke(failureMessage);
     }
@@ -430,6 +479,13 @@ public class RecorderService : IDisposable
             _tempWavPath = null;
         }
     }
+}
+
+internal enum RecordingCaptureState
+{
+    Idle,
+    Recording,
+    Stopping
 }
 
 internal interface IAudioRecorder : IDisposable
