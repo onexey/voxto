@@ -85,4 +85,50 @@ public class TrayIconTest
         Assert.True(gate.TryGetExisting(out var existingWindow));
         Assert.Same(replacementWindow, existingWindow);
     }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenRecordingAndCallbackIsFromOlderCapture_ReturnsTrue()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: true, activeCaptureId: 2, callbackCaptureId: 1);
+
+        Assert.True(shouldIgnore);
+    }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenRecordingAndCallbackMatchesActiveCapture_ReturnsFalse()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: true, activeCaptureId: 2, callbackCaptureId: 2);
+
+        Assert.False(shouldIgnore);
+    }
+
+    [Fact]
+    public void ShouldIgnoreCaptureCallback_WhenIdle_ReturnsFalse()
+    {
+        var shouldIgnore = TrayIcon.ShouldIgnoreCaptureCallback(isRecording: false, activeCaptureId: 2, callbackCaptureId: 1);
+
+        Assert.False(shouldIgnore);
+    }
+
+    [Fact]
+    public void GetUiState_WhenTranscribing_ShowsStatusWithoutBlockingStartRecording()
+    {
+        var uiState = TrayIcon.GetUiState(transcribing: true);
+
+        Assert.Equal("Voxto – Transcribing…", uiState.NotifyText);
+        Assert.Equal("▶  Start Recording", uiState.RecordItemText);
+        Assert.True(uiState.RecordItemEnabled);
+        Assert.True(uiState.PreferencesEnabled);
+    }
+
+    [Fact]
+    public void GetUiState_WhenRecording_ShowsStopActionAndDisablesPreferences()
+    {
+        var uiState = TrayIcon.GetUiState(recording: true);
+
+        Assert.Equal("Voxto – Recording…", uiState.NotifyText);
+        Assert.Equal("⏹  Stop Recording", uiState.RecordItemText);
+        Assert.True(uiState.RecordItemEnabled);
+        Assert.False(uiState.PreferencesEnabled);
+    }
 }

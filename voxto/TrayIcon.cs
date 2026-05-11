@@ -30,6 +30,7 @@ public class TrayIcon : IDisposable
     private OverlayWindow? _notificationOverlay; // transient: auto-dismiss notifications
     private DispatcherTimer? _notificationTimer;
     private bool _isRecording;
+    private long _activeCaptureId;
 
     private ToolStripMenuItem _recordItem = null!;
     private ToolStripMenuItem _prefsItem  = null!;
@@ -87,7 +88,7 @@ public class TrayIcon : IDisposable
         };
 
         _notifyIcon.ContextMenuStrip = BuildMenu();
-        _notifyIcon.DoubleClick += (_, _) => ToggleRecording();
+        _notifyIcon.DoubleClick += (_, _) => ToggleRecording("tray icon");
 
         RegisterHotkey();
     }
@@ -221,7 +222,7 @@ public class TrayIcon : IDisposable
     {
         var menu = new ContextMenuStrip();
 
-        _recordItem = new ToolStripMenuItem("▶  Start Recording",   null, (_, _) => ToggleRecording());
+        _recordItem = new ToolStripMenuItem("▶  Start Recording",   null, (_, _) => ToggleRecording("tray menu"));
         _prefsItem  = new ToolStripMenuItem("⚙  Preferences",       null, OnPreferences);
         _updateItem = new ToolStripMenuItem("🔄  Check for Updates", null, OnCheckForUpdates)
         {
@@ -240,36 +241,41 @@ public class TrayIcon : IDisposable
 
     // ── Recording ────────────────────────────────────────────────────────────
 
-    private async void ToggleRecording()
+    private async void ToggleRecording(string trigger)
     {
-        if (!_isRecording) await StartRecording();
-        else               await StopRecording();
+        if (!_isRecording) await StartRecording(trigger);
+        else               await StopRecording(trigger);
     }
 
-    private async Task StartRecording()
+    private async Task StartRecording(string trigger)
     {
-        if (_isRecording) return;
+        var started = await _recorder.StartRecordingAsync(trigger);
+        if (!started)
+            return;
+
         _isRecording = true;
-
+        _activeCaptureId = _recorder.ActiveCaptureId;
         DismissNotificationPill();
-        SetState(recording: true);
 
+        _overlay?.Close();
         _overlay = new OverlayWindow("Recording…", AppState.Recording);
         _overlay.Show();
 
-        await _recorder.StartRecordingAsync();
+        SetState(recording: true);
     }
 
-    private async Task StopRecording()
+    private async Task StopRecording(string trigger)
     {
-        if (!_isRecording) return;
+        var stopped = await _recorder.StopAndTranscribeAsync(trigger);
+        if (!stopped)
+            return;
+
         _isRecording = false;
 
         _overlay?.Close();
         _overlay = null;
 
         SetState(transcribing: true);
-        await _recorder.StopAndTranscribeAsync();
     }
 
     // ── Hotkey ───────────────────────────────────────────────────────────────
@@ -282,14 +288,14 @@ public class TrayIcon : IDisposable
         if (_settings.HotkeyMode == HotkeyMode.Toggle)
         {
             _hotkey.Pressed += () =>
-                Application.Current.Dispatcher.Invoke(ToggleRecording);
+                Application.Current.Dispatcher.Invoke(() => ToggleRecording("toggle hotkey"));
         }
         else
         {
             _hotkey.Pressed  += () =>
-                Application.Current.Dispatcher.Invoke(async () => await StartRecording());
+                Application.Current.Dispatcher.Invoke(async () => await StartRecording("push-to-talk hotkey press"));
             _hotkey.Released += () =>
-                Application.Current.Dispatcher.Invoke(async () => await StopRecording());
+                Application.Current.Dispatcher.Invoke(async () => await StopRecording("push-to-talk hotkey release"));
         }
     }
 
@@ -424,32 +430,49 @@ public class TrayIcon : IDisposable
 
     // ── Transcription callbacks ───────────────────────────────────────────────
 
-    private void OnTranscriptionCompleted()
+    private void OnTranscriptionCompleted(long captureId)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            SetState();
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
+            if (!_isRecording)
+                SetState();
+
             ShowNotificationPill("Transcription saved ✅", AppState.Ready, durationMs: 4000);
         });
     }
 
-    private void OnTranscriptionFailed(string error)
+    private void OnTranscriptionFailed(long captureId, string error)
     {
         Log.Error("Voxto operation failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
-            _isRecording = false;
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
+            if (_isRecording)
+                _isRecording = false;
+
             _overlay?.Close();
             _overlay = null;
             SetState();
-            ShowNotificationPill($"Failed: {error}", AppState.Recording, durationMs: 4000);
+
+            ShowNotificationPill($"Failed: {error}", AppState.Ready, durationMs: 4000);
         });
     }
 
-    private void OnModelDownloadStarted(string modelName)
+    private void OnModelDownloadStarted(long captureId, string modelName)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
+            if (_isRecording)
+                return;
+
             _notifyIcon.Icon = _transcribingIcon;
             _notifyIcon.Text = $"Voxto – Downloading {modelName} model…";
 
@@ -459,15 +482,24 @@ public class TrayIcon : IDisposable
         });
     }
 
-    private void OnModelDownloadFinished()
+    private void OnModelDownloadFinished(long captureId)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
+                return;
+
+            if (_isRecording)
+                return;
+
             _overlay?.Close();
             _overlay = null;
-            SetState(transcribing: true);
+            SetState();
         });
     }
+
+    internal static bool ShouldIgnoreCaptureCallback(bool isRecording, long activeCaptureId, long callbackCaptureId) =>
+        isRecording && activeCaptureId != 0 && activeCaptureId != callbackCaptureId;
 
     // ── Exit ─────────────────────────────────────────────────────────────────
 
@@ -515,34 +547,48 @@ public class TrayIcon : IDisposable
 
     // ── UI state ─────────────────────────────────────────────────────────────
 
+    internal static (string NotifyText, string RecordItemText, bool RecordItemEnabled, bool PreferencesEnabled) GetUiState(
+        bool recording = false,
+        bool transcribing = false)
+    {
+        if (recording)
+            return ("Voxto – Recording…", "⏹  Stop Recording", true, false);
+
+        if (transcribing)
+            return ("Voxto – Transcribing…", "▶  Start Recording", true, true);
+
+        return ("Voxto – Idle", "▶  Start Recording", true, true);
+    }
+
     private void SetState(bool recording = false, bool transcribing = false)
     {
         StopTrayAnimation();
+        var uiState = GetUiState(recording, transcribing);
 
         if (recording)
         {
             _notifyIcon.Icon    = _recordingFrames[0];
-            _notifyIcon.Text    = "Voxto – Recording…";
-            _recordItem.Text    = "⏹  Stop Recording";
-            _recordItem.Enabled = true;
-            _prefsItem.Enabled  = false;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
             StartRecordingAnimation();
         }
         else if (transcribing)
         {
             _notifyIcon.Icon    = _transcribingIcon;
-            _notifyIcon.Text    = "Voxto – Transcribing…";
-            _recordItem.Text    = "⏹  Stop Recording";
-            _recordItem.Enabled = false;
-            _prefsItem.Enabled  = true;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
         }
         else
         {
             _notifyIcon.Icon    = _readyIcon;
-            _notifyIcon.Text    = "Voxto – Idle";
-            _recordItem.Text    = "▶  Start Recording";
-            _recordItem.Enabled = true;
-            _prefsItem.Enabled  = true;
+            _notifyIcon.Text    = uiState.NotifyText;
+            _recordItem.Text    = uiState.RecordItemText;
+            _recordItem.Enabled = uiState.RecordItemEnabled;
+            _prefsItem.Enabled  = uiState.PreferencesEnabled;
         }
     }
 
