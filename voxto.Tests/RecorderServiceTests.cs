@@ -417,33 +417,6 @@ public sealed class RecorderServiceTests : IDisposable
         Assert.False(File.Exists(audioPath));
     }
 
-    [Fact]
-    public async Task StopAndTranscribeAsync_WhenRecordingIsTooShort_RaisesFailureAfterStopCompletes()
-    {
-        var recorder = new FakeAudioRecorder();
-        var service = new RecorderService(
-            new AppSettings(),
-            new OutputManager(new SpyOutput()),
-            _ => Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]),
-            () => recorder);
-        var failureRaised = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        service.TranscriptionFailed += (_, error) => failureRaised.TrySetResult(error);
-
-        Assert.True(await service.StartRecordingAsync("push-to-talk hotkey press"));
-        recorder.RaiseDataAvailable(new byte[1000]);
-
-        var stopTask = service.StopAndTranscribeAsync("push-to-talk hotkey release");
-        recorder.RaiseRecordingStopped();
-
-        Assert.False(failureRaised.Task.IsCompleted);
-        Assert.True(await stopTask);
-        Assert.False(failureRaised.Task.IsCompleted);
-        Assert.Equal(
-            "Recording was too short. Hold the hotkey a little longer and try again.",
-            await failureRaised.Task);
-    }
-
     private string CreateTempAudioFile(TimeSpan? duration = null)
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.wav");

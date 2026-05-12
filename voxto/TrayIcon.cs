@@ -31,6 +31,7 @@ public class TrayIcon : IDisposable
     private DispatcherTimer? _notificationTimer;
     private bool _isRecording;
     private long _activeCaptureId;
+    private long _lastSettledCaptureId;
 
     private ToolStripMenuItem _recordItem = null!;
     private ToolStripMenuItem _prefsItem  = null!;
@@ -266,6 +267,7 @@ public class TrayIcon : IDisposable
 
     private async Task StopRecording(string trigger)
     {
+        var captureId = _activeCaptureId;
         var stopped = await _recorder.StopAndTranscribeAsync(trigger);
         if (!stopped)
             return;
@@ -275,7 +277,8 @@ public class TrayIcon : IDisposable
         _overlay?.Close();
         _overlay = null;
 
-        SetState(transcribing: true);
+        if (ShouldShowTranscribingState(captureId, _lastSettledCaptureId))
+            SetState(transcribing: true);
     }
 
     // ── Hotkey ───────────────────────────────────────────────────────────────
@@ -434,6 +437,7 @@ public class TrayIcon : IDisposable
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            _lastSettledCaptureId = captureId;
             if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
                 return;
 
@@ -449,6 +453,7 @@ public class TrayIcon : IDisposable
         Log.Error("Voxto operation failed: {Error}", error);
         Application.Current.Dispatcher.Invoke(() =>
         {
+            _lastSettledCaptureId = captureId;
             if (ShouldIgnoreCaptureCallback(_isRecording, _activeCaptureId, captureId))
                 return;
 
@@ -500,6 +505,9 @@ public class TrayIcon : IDisposable
 
     internal static bool ShouldIgnoreCaptureCallback(bool isRecording, long activeCaptureId, long callbackCaptureId) =>
         isRecording && activeCaptureId != 0 && activeCaptureId != callbackCaptureId;
+
+    internal static bool ShouldShowTranscribingState(long captureId, long lastSettledCaptureId) =>
+        captureId != 0 && captureId != lastSettledCaptureId;
 
     // ── Exit ─────────────────────────────────────────────────────────────────
 
