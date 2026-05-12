@@ -111,6 +111,30 @@ public class TrayIconTest
     }
 
     [Fact]
+    public void ShouldShowTranscribingState_WhenCaptureIsNotSettled_ReturnsTrue()
+    {
+        var shouldShow = TrayIcon.ShouldShowTranscribingState(captureId: 2, lastSettledCaptureId: 1);
+
+        Assert.True(shouldShow);
+    }
+
+    [Fact]
+    public void ShouldShowTranscribingState_WhenCaptureAlreadySettled_ReturnsFalse()
+    {
+        var shouldShow = TrayIcon.ShouldShowTranscribingState(captureId: 2, lastSettledCaptureId: 2);
+
+        Assert.False(shouldShow);
+    }
+
+    [Fact]
+    public void ShouldShowTranscribingState_WhenCaptureIdIsZero_ReturnsFalse()
+    {
+        var shouldShow = TrayIcon.ShouldShowTranscribingState(captureId: 0, lastSettledCaptureId: 0);
+
+        Assert.False(shouldShow);
+    }
+
+    [Fact]
     public void GetUiState_WhenTranscribing_ShowsStatusWithoutBlockingStartRecording()
     {
         var uiState = TrayIcon.GetUiState(transcribing: true);
