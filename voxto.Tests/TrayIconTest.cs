@@ -127,6 +127,14 @@ public class TrayIconTest
     }
 
     [Fact]
+    public void ShouldShowTranscribingState_WhenCaptureIdIsZero_ReturnsFalse()
+    {
+        var shouldShow = TrayIcon.ShouldShowTranscribingState(captureId: 0, lastSettledCaptureId: 0);
+
+        Assert.False(shouldShow);
+    }
+
+    [Fact]
     public void GetUiState_WhenTranscribing_ShowsStatusWithoutBlockingStartRecording()
     {
         var uiState = TrayIcon.GetUiState(transcribing: true);
