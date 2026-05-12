@@ -452,8 +452,14 @@ public class RecorderService : IDisposable
 
     private void StartTranscription(long captureId, string wavPath)
     {
-        var transcriptionTask = TranscribeFileAsync(captureId, wavPath, deleteAfterTranscribe: true);
+        var transcriptionTask = StartTranscriptionAsync(captureId, wavPath);
         _ = ObserveTranscriptionTaskAsync(captureId, transcriptionTask);
+    }
+
+    private async Task StartTranscriptionAsync(long captureId, string wavPath)
+    {
+        await Task.Yield();
+        await TranscribeFileAsync(captureId, wavPath, deleteAfterTranscribe: true);
     }
 
     private static async Task ObserveTranscriptionTaskAsync(long captureId, Task transcriptionTask)
