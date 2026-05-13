@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Windows.Input;
 
 namespace Voxto;
 
@@ -59,6 +60,12 @@ public class AppSettings
     public int HotkeyVirtualKey { get; set; } = 0x78;
 
     /// <summary>
+    /// Modifier keys that must be held with <see cref="HotkeyVirtualKey"/>.
+    /// Defaults to <see cref="ModifierKeys.None"/>.
+    /// </summary>
+    public ModifierKeys HotkeyModifiers { get; set; } = ModifierKeys.None;
+
+    /// <summary>
     /// IDs of the <see cref="IOutputSettings"/> add-ons that are currently enabled.
     /// Defaults to <c>["MarkdownFile"]</c> (one file per recording).
     /// </summary>
@@ -105,6 +112,7 @@ public class AppSettings
         ModelType = other.ModelType;
         HotkeyMode = other.HotkeyMode;
         HotkeyVirtualKey = other.HotkeyVirtualKey;
+        HotkeyModifiers = other.HotkeyModifiers;
         EnabledOutputs = [.. other.EnabledOutputs];
         OutputSettings = other.OutputSettings.ToDictionary(
             pair => pair.Key,

@@ -3,9 +3,12 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Voxto;
+using Button = System.Windows.Controls.Button;
 using Border = System.Windows.Controls.Border;
+using TextBox = System.Windows.Controls.TextBox;
 using WpfImage = System.Windows.Controls.Image;
 using Xunit;
 using TabControl = System.Windows.Controls.TabControl;
@@ -90,6 +93,127 @@ public class PreferencesWindowTests
         });
 
         Assert.Contains("ExperimentalOutput", enabledOutputs);
+    }
+
+    [Fact]
+    public void Constructor_ShowsConfiguredShortcutInTextBox()
+    {
+        var hotkeyText = RunInSta(() =>
+        {
+            var current = new AppSettings
+            {
+                HotkeyVirtualKey = KeyInterop.VirtualKeyFromKey(Key.R),
+                HotkeyModifiers = ModifierKeys.Control | ModifierKeys.Shift
+            };
+
+            using var updateService = new UpdateService(current);
+            var window = new PreferencesWindow(current, new OutputManager(), updateService);
+            var hotkeyTextBox = Assert.IsType<TextBox>(window.FindName("HotkeyTextBox"));
+            return hotkeyTextBox.Text;
+        });
+
+        Assert.Equal("Ctrl+Shift+R", hotkeyText);
+    }
+
+    [Fact]
+    public void BuildSettings_PreservesConfiguredHotkeyShortcut()
+    {
+        var hotkey = RunInSta(() =>
+        {
+            var current = new AppSettings
+            {
+                HotkeyVirtualKey = KeyInterop.VirtualKeyFromKey(Key.R),
+                HotkeyModifiers = ModifierKeys.Control | ModifierKeys.Shift
+            };
+
+            using var updateService = new UpdateService(current);
+            var window = new PreferencesWindow(current, new OutputManager(), updateService);
+            var method = typeof(PreferencesWindow).GetMethod("BuildSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var result = Assert.IsType<AppSettings>(method!.Invoke(window, null));
+            return (result.HotkeyVirtualKey, result.HotkeyModifiers);
+        });
+
+        Assert.Equal(KeyInterop.VirtualKeyFromKey(Key.R), hotkey.HotkeyVirtualKey);
+        Assert.Equal(ModifierKeys.Control | ModifierKeys.Shift, hotkey.HotkeyModifiers);
+    }
+
+    [Fact]
+    public void RecordShortcutButton_ClickTogglesCaptureState()
+    {
+        var state = RunInSta(() =>
+        {
+            using var updateService = new UpdateService(new AppSettings());
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
+            var button = Assert.IsType<Button>(window.FindName("RecordHotkeyButton"));
+            var hint = Assert.IsType<TextBlock>(window.FindName("HotkeyRecordingHintText"));
+
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var activeState = window.IsRecordingHotkey;
+            var activeHint = hint.Visibility;
+
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            return (
+                ActiveState: activeState,
+                ActiveHint: activeHint,
+                InactiveState: window.IsRecordingHotkey,
+                InactiveHint: hint.Visibility);
+        });
+
+        Assert.True(state.ActiveState);
+        Assert.Equal(Visibility.Visible, state.ActiveHint);
+        Assert.False(state.InactiveState);
+        Assert.Equal(Visibility.Collapsed, state.InactiveHint);
+    }
+
+    [Fact]
+    public void HandleHotkeyRecordingKey_EscapeCancelsCaptureWithoutChangingShortcut()
+    {
+        var state = RunInSta(() =>
+        {
+            var current = new AppSettings
+            {
+                HotkeyVirtualKey = KeyInterop.VirtualKeyFromKey(Key.R),
+                HotkeyModifiers = ModifierKeys.Control
+            };
+
+            using var updateService = new UpdateService(current);
+            var window = new PreferencesWindow(current, new OutputManager(), updateService);
+            var button = Assert.IsType<Button>(window.FindName("RecordHotkeyButton"));
+            var hotkeyTextBox = Assert.IsType<TextBox>(window.FindName("HotkeyTextBox"));
+
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var handled = window.HandleHotkeyRecordingKey(Key.Escape, ModifierKeys.None);
+
+            return (
+                Handled: handled,
+                IsRecordingHotkey: window.IsRecordingHotkey,
+                Text: hotkeyTextBox.Text);
+        });
+
+        Assert.True(state.Handled);
+        Assert.False(state.IsRecordingHotkey);
+        Assert.Equal("Ctrl+R", state.Text);
+    }
+
+    [Fact]
+    public void HandleHotkeyRecordingKey_TabRemainsAvailableForNavigation()
+    {
+        var state = RunInSta(() =>
+        {
+            using var updateService = new UpdateService(new AppSettings());
+            var window = new PreferencesWindow(new AppSettings(), new OutputManager(), updateService);
+            var button = Assert.IsType<Button>(window.FindName("RecordHotkeyButton"));
+
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var handled = window.HandleHotkeyRecordingKey(Key.Tab, ModifierKeys.None);
+
+            return (
+                Handled: handled,
+                IsRecordingHotkey: window.IsRecordingHotkey);
+        });
+
+        Assert.False(state.Handled);
+        Assert.True(state.IsRecordingHotkey);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Windows.Input;
 using Xunit;
 using Voxto;
 
@@ -43,6 +44,13 @@ public class AppSettingsTests : IDisposable
         Assert.Equal(0x78, settings.HotkeyVirtualKey);
     }
 
+    [Fact]
+    public void NewInstance_DefaultHotkeyModifiers_AreNone()
+    {
+        var settings = new AppSettings();
+        Assert.Equal(ModifierKeys.None, settings.HotkeyModifiers);
+    }
+
     // ── Load with no file ─────────────────────────────────────────────────────
 
     [Fact]
@@ -83,6 +91,16 @@ public class AppSettingsTests : IDisposable
 
         var loaded = AppSettings.Load(TempFile);
         Assert.Equal(0x70, loaded.HotkeyVirtualKey);
+    }
+
+    [Fact]
+    public void SaveThenLoad_PreservesHotkeyModifiers()
+    {
+        var original = new AppSettings { HotkeyModifiers = ModifierKeys.Control | ModifierKeys.Shift };
+        original.Save(TempFile);
+
+        var loaded = AppSettings.Load(TempFile);
+        Assert.Equal(ModifierKeys.Control | ModifierKeys.Shift, loaded.HotkeyModifiers);
     }
 
     [Fact]
@@ -200,6 +218,7 @@ public class AppSettingsTests : IDisposable
         var original = new AppSettings
         {
             ModelType = "Medium",
+            HotkeyModifiers = ModifierKeys.Control,
             EnabledOutputs = ["MarkdownFile", "TodoAppend"],
             OutputSettings =
             {
@@ -215,6 +234,7 @@ public class AppSettingsTests : IDisposable
         original.OutputSettings.Clear();
 
         Assert.Equal("Medium", copy.ModelType);
+        Assert.Equal(ModifierKeys.Control, copy.HotkeyModifiers);
         Assert.Equal(["MarkdownFile", "TodoAppend"], copy.EnabledOutputs);
         Assert.True(copy.OutputSettings["CursorInsert"].Deserialize<CursorInsertOutputSettings>()!.PressEnterAfterInsert);
     }

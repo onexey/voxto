@@ -1,6 +1,7 @@
 <Window x:Class="Voxto.PreferencesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Voxto — Preferences"
         Width="860"
         Height="700"
@@ -9,9 +10,12 @@
         Background="#F3F6FB"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        PreviewKeyDown="OnPreviewHotkeyKeyDown">
 
     <Window.Resources>
+        <sys:String x:Key="RecordShortcutButtonText">Record shortcut</sys:String>
+        <sys:String x:Key="CancelRecordingButtonText">Cancel recording</sys:String>
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F3F6FB"/>
         <SolidColorBrush x:Key="PanelBorderBrush" Color="#E5E7EB"/>
         <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
@@ -270,7 +274,28 @@
                                         <TextBlock Text="Recording hotkey" Style="{StaticResource CardTitleStyle}"/>
                                         <TextBlock Text="Pick how your global hotkey should behave while recording."
                                                    Style="{StaticResource CardDescriptionStyle}"/>
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="HotkeyTextBox"
+                                                     IsReadOnly="True"
+                                                     VerticalContentAlignment="Center"/>
+                                             <Button x:Name="RecordHotkeyButton"
+                                                     Grid.Column="1"
+                                                     Width="150"
+                                                     Margin="12,0,0,0"
+                                                     Content="{StaticResource RecordShortcutButtonText}"
+                                                     Click="OnRecordHotkey"/>
+                                        </Grid>
+                                        <TextBlock x:Name="HotkeyRecordingHintText"
+                                                   Margin="0,8,0,0"
+                                                   Visibility="Collapsed"
+                                                   Text="Press the shortcut you want to use."
+                                                   Style="{StaticResource CardDescriptionStyle}"/>
                                         <RadioButton x:Name="RadioToggle"
+                                                     Margin="0,12,0,0"
                                                      Content="Toggle — press once to start, press again to stop"
                                                      GroupName="HotkeyMode"/>
                                         <RadioButton x:Name="RadioPushToTalk"
