@@ -261,6 +261,9 @@ public class GlobalHotkey : IDisposable
     private static string GetKeyDisplayName(int virtualKey)
     {
         var key = KeyInterop.KeyFromVirtualKey(virtualKey);
+        if (key == Key.None)
+            return $"VK 0x{virtualKey:X2}";
+
         return key switch
         {
             Key.D0 => "0",
@@ -273,7 +276,15 @@ public class GlobalHotkey : IDisposable
             Key.D7 => "7",
             Key.D8 => "8",
             Key.D9 => "9",
-            _ => TypeDescriptor.GetConverter(typeof(Key)).ConvertToInvariantString(key) ?? $"VK 0x{virtualKey:X2}"
+            _ => GetConvertedKeyDisplayName(key, virtualKey)
         };
+    }
+
+    private static string GetConvertedKeyDisplayName(Key key, int virtualKey)
+    {
+        var displayName = TypeDescriptor.GetConverter(typeof(Key)).ConvertToInvariantString(key);
+        return string.IsNullOrWhiteSpace(displayName) || string.Equals(displayName, nameof(Key.None), StringComparison.Ordinal)
+            ? $"VK 0x{virtualKey:X2}"
+            : displayName;
     }
 }

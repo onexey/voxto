@@ -45,4 +45,12 @@ public class GlobalHotkeyTests
 
         Assert.Equal("Ctrl+Shift+R", shortcut);
     }
+
+    [Fact]
+    public void FormatShortcut_UnknownVirtualKey_UsesVirtualKeyFallback()
+    {
+        var shortcut = GlobalHotkey.FormatShortcut(ModifierKeys.Control, 0x07);
+
+        Assert.Equal("Ctrl+VK 0x07", shortcut);
+    }
 }

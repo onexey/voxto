@@ -11,6 +11,8 @@ namespace Voxto;
 /// </summary>
 public partial class PreferencesWindow : Window
 {
+    private const string RecordShortcutButtonTextResourceKey = "RecordShortcutButtonText";
+    private const string CancelRecordingButtonTextResourceKey = "CancelRecordingButtonText";
     private readonly OutputManager _outputManager;
     private readonly UpdateService _updateService;
     private readonly AppSettings _currentSettings;
@@ -24,6 +26,8 @@ public partial class PreferencesWindow : Window
     /// Only valid after <see cref="ShowDialog"/> returns <c>true</c>.
     /// </summary>
     public AppSettings Result { get; private set; }
+
+    internal bool IsRecordingHotkey => _isRecordingHotkey;
 
     /// <summary>Opens the preferences window pre-populated with <paramref name="current"/> settings.</summary>
     internal PreferencesWindow(AppSettings current, OutputManager outputManager, UpdateService updateService)
@@ -166,7 +170,9 @@ public partial class PreferencesWindow : Window
     private void RefreshHotkeyEditor()
     {
         HotkeyTextBox.Text = GlobalHotkey.FormatShortcut(_hotkeyModifiers, _hotkeyVirtualKey);
-        RecordHotkeyButton.Content = _isRecordingHotkey ? "Cancel recording" : "Record shortcut";
+        RecordHotkeyButton.Content = FindResource(_isRecordingHotkey
+            ? CancelRecordingButtonTextResourceKey
+            : RecordShortcutButtonTextResourceKey);
         HotkeyRecordingHintText.Visibility = _isRecordingHotkey ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -185,19 +191,35 @@ public partial class PreferencesWindow : Window
 
     private void OnPreviewHotkeyKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (!_isRecordingHotkey)
-            return;
-
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (GlobalHotkey.TryBuildShortcut(key, Keyboard.Modifiers, out var virtualKey, out var modifiers))
+        e.Handled = HandleHotkeyRecordingKey(key, Keyboard.Modifiers);
+    }
+
+    internal bool HandleHotkeyRecordingKey(Key key, ModifierKeys modifiers)
+    {
+        if (!_isRecordingHotkey)
+            return false;
+
+        if (key == Key.Escape)
         {
-            _hotkeyVirtualKey = virtualKey;
-            _hotkeyModifiers = modifiers;
             _isRecordingHotkey = false;
             RefreshHotkeyEditor();
+            return true;
         }
 
-        e.Handled = true;
+        if (key == Key.Tab)
+            return false;
+
+        if (GlobalHotkey.TryBuildShortcut(key, modifiers, out var virtualKey, out var normalizedModifiers))
+        {
+            _hotkeyVirtualKey = virtualKey;
+            _hotkeyModifiers = normalizedModifiers;
+            _isRecordingHotkey = false;
+            RefreshHotkeyEditor();
+            return true;
+        }
+
+        return GlobalHotkey.IsModifierKey(key);
     }
 
     private async void OnCheckNow(object sender, RoutedEventArgs e)
