@@ -183,7 +183,7 @@ public partial class PreferencesWindow : Window
         }
     }
 
-    private void OnPreviewHotkeyKeyDown(object sender, KeyEventArgs e)
+    private void OnPreviewHotkeyKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (!_isRecordingHotkey)
             return;
