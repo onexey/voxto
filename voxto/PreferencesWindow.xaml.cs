@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace Voxto;
 
@@ -14,6 +15,9 @@ public partial class PreferencesWindow : Window
     private readonly UpdateService _updateService;
     private readonly AppSettings _currentSettings;
     private readonly List<IOutputSettings> _outputSettingsPages = [];
+    private int _hotkeyVirtualKey;
+    private ModifierKeys _hotkeyModifiers;
+    private bool _isRecordingHotkey;
 
     /// <summary>
     /// The settings produced when the user clicks Save.
@@ -75,6 +79,9 @@ public partial class PreferencesWindow : Window
         RadioToggle.IsChecked = settings.HotkeyMode == HotkeyMode.Toggle;
         RadioPushToTalk.IsChecked = settings.HotkeyMode == HotkeyMode.PushToTalk;
         StartupCheck.IsChecked = StartupManager.IsEnabled();
+        _hotkeyVirtualKey = settings.HotkeyVirtualKey;
+        _hotkeyModifiers = settings.HotkeyModifiers;
+        RefreshHotkeyEditor();
 
         AutoUpdateCheck.IsChecked = settings.AutoUpdateEnabled;
         AutoInstallUpdateCheck.IsChecked = settings.AutoDownloadInstallRestartEnabled;
@@ -126,6 +133,8 @@ public partial class PreferencesWindow : Window
         settings.HotkeyMode = RadioToggle.IsChecked == true
             ? HotkeyMode.Toggle
             : HotkeyMode.PushToTalk;
+        settings.HotkeyVirtualKey = _hotkeyVirtualKey;
+        settings.HotkeyModifiers = _hotkeyModifiers;
 
         settings.AutoUpdateEnabled = AutoUpdateCheck.IsChecked == true;
         settings.AutoDownloadInstallRestartEnabled = AutoInstallUpdateCheck.IsChecked == true;
@@ -154,6 +163,43 @@ public partial class PreferencesWindow : Window
     private void OnAutoUpdateChanged(object sender, RoutedEventArgs e) =>
         UpdateFrequencyRowEnabled();
 
+    private void RefreshHotkeyEditor()
+    {
+        HotkeyTextBox.Text = GlobalHotkey.FormatShortcut(_hotkeyModifiers, _hotkeyVirtualKey);
+        RecordHotkeyButton.Content = _isRecordingHotkey ? "Cancel recording" : "Record shortcut";
+        HotkeyRecordingHintText.Visibility = _isRecordingHotkey ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnRecordHotkey(object sender, RoutedEventArgs e)
+    {
+        _isRecordingHotkey = !_isRecordingHotkey;
+        RefreshHotkeyEditor();
+
+        if (_isRecordingHotkey)
+        {
+            Activate();
+            Focus();
+            Keyboard.Focus(this);
+        }
+    }
+
+    private void OnPreviewHotkeyKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_isRecordingHotkey)
+            return;
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (GlobalHotkey.TryBuildShortcut(key, Keyboard.Modifiers, out var virtualKey, out var modifiers))
+        {
+            _hotkeyVirtualKey = virtualKey;
+            _hotkeyModifiers = modifiers;
+            _isRecordingHotkey = false;
+            RefreshHotkeyEditor();
+        }
+
+        e.Handled = true;
+    }
+
     private async void OnCheckNow(object sender, RoutedEventArgs e)
     {
         CheckNowBtn.IsEnabled = false;
@@ -172,6 +218,7 @@ public partial class PreferencesWindow : Window
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
+        _isRecordingHotkey = false;
         Result = BuildSettings();
         Result.Save();
 

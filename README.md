@@ -12,7 +12,7 @@ A minimal Windows tray app that records audio, transcribes it with Whisper.net, 
 
 - 🎙️ Start/stop recording from the system tray or hotkey
 - 🔴 Small always-on-top overlay while recording (hidden when idle)
-- ⌨️ Hotkey support — **Toggle** (press once) or **Push-to-talk** (hold key), switchable from the tray
+- ⌨️ Configurable hotkey support — default **F9**, with **Toggle** (press once) or **Push-to-talk** (hold key)
 - 🤖 Model selection from the tray — Tiny / Small / Medium / Large V3 Turbo
 - 🖊️ Output directly to the current cursor location, with optional Enter after insertion
 - 📁 Configurable output folder (set once, auto-named files)
@@ -41,12 +41,12 @@ Settings are saved to:
 
 ## Default Hotkey
 
-**F9** — change mode via tray → Hotkey Mode
+**F9** by default — change the shortcut in **Preferences → General**
 
 | Mode | Behaviour |
 |---|---|
-| Toggle | Press F9 once to start, press again to stop |
-| Push-to-talk | Hold F9 to record, release to stop |
+| Toggle | Press the configured shortcut once to start, press again to stop |
+| Push-to-talk | Hold the configured shortcut to record, release to stop |
 
 ## Tray Menu
 
@@ -70,6 +70,7 @@ Settings are saved to:
 
 - [Output targets](docs/outputs.md)
 - [Preferences](docs/preferences.md)
+- [Hotkeys](docs/hotkeys.md)
 - [Auto-update](docs/auto-update.md)
 - [Installer](docs/installer.md)
 - [Transcription performance](docs/transcription-performance.md)

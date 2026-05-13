@@ -286,7 +286,7 @@ public class TrayIcon : IDisposable
     private void RegisterHotkey()
     {
         _hotkey?.Dispose();
-        _hotkey = new GlobalHotkey(_settings.HotkeyVirtualKey, _settings.HotkeyMode);
+        _hotkey = new GlobalHotkey(_settings.HotkeyVirtualKey, _settings.HotkeyModifiers, _settings.HotkeyMode);
 
         if (_settings.HotkeyMode == HotkeyMode.Toggle)
         {

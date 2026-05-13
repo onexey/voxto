@@ -72,6 +72,7 @@ voxto/
 │   ├── installer.md          # MSI design, build instructions, UpgradeCode, uninstall
 │   ├── outputs.md            # output targets and their configuration
 │   ├── preferences.md        # preferences tabs and isolated output settings
+│   ├── hotkeys.md            # configurable recording shortcut defaults and capture flow
 │   └── transcription-performance.md # model reuse and hardware acceleration notes
 ├── .github/
 │   ├── copilot-instructions.md  # ← you are here
