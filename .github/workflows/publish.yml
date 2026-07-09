@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout (pinned to the commit that passed CI)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
@@ -131,7 +131,7 @@ jobs:
 
     steps:
       - name: Checkout (pinned to the commit that passed CI)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
