@@ -148,8 +148,9 @@ public sealed class UpdateService : IDisposable
     {
         Stop(); // cancel any existing loop before creating a new one
         PruneOldUpdateInstallers(_updateCacheDir, CachedUpdateVersionsToKeep, PendingMsiPath);
-        _cts            = new CancellationTokenSource();
-        _backgroundLoop = Task.Run(() => PeriodicCheckLoopAsync(_cts.Token));
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+        _backgroundLoop = Task.Run(() => PeriodicCheckLoopAsync(cts.Token));
     }
 
     /// <summary>Cancels the background loop and waits for it to finish.</summary>

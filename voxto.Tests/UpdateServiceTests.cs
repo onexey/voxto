@@ -170,6 +170,24 @@ public class UpdateServiceTests : IDisposable
             Directory.GetFiles(_tempDir, "voxto-*-win-*.msi", SearchOption.TopDirectoryOnly).Length);
     }
 
+    [Fact]
+    public void StartThenStopImmediately_DoesNotRaceCancellationSource()
+    {
+        var harness = new UpdateServiceHarness(_tempDir);
+        using var service = harness.CreateService();
+
+        var exception = Record.Exception(() =>
+        {
+            for (var i = 0; i < 100; i++)
+            {
+                service.Start();
+                service.Stop();
+            }
+        });
+
+        Assert.Null(exception);
+    }
+
     // ── IsDueForCheck ─────────────────────────────────────────────────────────
 
     [Fact]
