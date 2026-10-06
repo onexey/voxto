@@ -106,6 +106,70 @@ public class UpdateServiceTests : IDisposable
         Assert.False(UpdateService.VerifySha256(tmp.Path, hash));
     }
 
+    [Fact]
+    public void PruneOldUpdateInstallers_KeepsThreeVersionsAcrossArchitecturesAndPreservesMalformedNames()
+    {
+        var oldestX64 = Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.1.1.1", Architecture.X64));
+        var oldestArm64 = Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.1.1.1", Architecture.Arm64));
+        var newestX64 = Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.4.4.4", Architecture.X64));
+        var newestArm64 = Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.4.4.4", Architecture.Arm64));
+        var malformedInstaller = Path.Combine(_tempDir, "voxto-02026.2.2.2-win-x64.msi");
+        var unsupportedArchitecture = Path.Combine(_tempDir, "voxto-2025.1.1.1-win-x86.msi");
+        foreach (var path in new[]
+                 {
+                     oldestX64,
+                     oldestArm64,
+                     Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.2.2.2", Architecture.X64)),
+                     Path.Combine(_tempDir, UpdateService.BuildMsiFileName("2026.3.3.3", Architecture.X64)),
+                     newestX64,
+                     newestArm64,
+                     malformedInstaller,
+                     unsupportedArchitecture
+                 })
+        {
+            File.WriteAllText(path, "installer");
+        }
+
+        UpdateService.PruneOldUpdateInstallers(_tempDir, versionsToKeep: 3);
+
+        Assert.False(File.Exists(oldestX64));
+        Assert.False(File.Exists(oldestArm64));
+        Assert.True(File.Exists(newestX64));
+        Assert.True(File.Exists(newestArm64));
+        Assert.True(File.Exists(malformedInstaller));
+        Assert.True(File.Exists(unsupportedArchitecture));
+    }
+
+    [Fact]
+    public void Start_PrunesExistingUpdateCacheToNewestThreeVersions()
+    {
+        var cachedVersions = new[]
+        {
+            "2026.1.1.1",
+            "2026.2.2.2",
+            "2026.3.3.3",
+            "2026.4.4.4"
+        };
+        foreach (var cachedVersion in cachedVersions)
+        {
+            File.WriteAllText(
+                Path.Combine(_tempDir, UpdateService.BuildMsiFileName(cachedVersion, Architecture.X64)),
+                cachedVersion);
+        }
+
+        var harness = new UpdateServiceHarness(_tempDir);
+        using var service = harness.CreateService();
+
+        service.Start();
+
+        Assert.False(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("2026.1.1.1", Architecture.X64))));
+        Assert.Equal(
+            3,
+            Directory.GetFiles(_tempDir, "voxto-*-win-*.msi", SearchOption.TopDirectoryOnly).Length);
+    }
+
     // ── IsDueForCheck ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -210,6 +274,90 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal(0, harness.ReadyCount);
         Assert.Empty(harness.FailedMessages);
         Assert.Equal(1, harness.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_AfterVerifiedDownload_KeepsOnlyNewestThreeCachedVersions()
+    {
+        const string version = "9999.2.2.6";
+        var cachedVersions = new[]
+        {
+            "2026.1.1.1",
+            "2026.2.2.2",
+            "2026.3.3.3",
+            "2026.4.4.4"
+        };
+        foreach (var cachedVersion in cachedVersions)
+        {
+            File.WriteAllText(
+                Path.Combine(_tempDir, UpdateService.BuildMsiFileName(cachedVersion, RuntimeInformation.ProcessArchitecture)),
+                cachedVersion);
+        }
+
+        var unrelatedFile = Path.Combine(_tempDir, "notes.txt");
+        File.WriteAllText(unrelatedFile, "keep");
+
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(version)
+        };
+        harness.HashResponse = $"{ComputeSha256HexFromContent(harness.DownloadPayload)}  {UpdateService.BuildMsiFileName(version, RuntimeInformation.ProcessArchitecture)}";
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync(downloadAndApply: true);
+
+        Assert.False(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("2026.1.1.1", RuntimeInformation.ProcessArchitecture))));
+        Assert.False(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("2026.2.2.2", RuntimeInformation.ProcessArchitecture))));
+        Assert.True(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("2026.3.3.3", RuntimeInformation.ProcessArchitecture))));
+        Assert.True(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("2026.4.4.4", RuntimeInformation.ProcessArchitecture))));
+        Assert.True(File.Exists(service.PendingMsiPath));
+        Assert.True(File.Exists(unrelatedFile));
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WhenCacheContainsNewerVersions_PreservesPendingInstallerWithinThreeVersionLimit()
+    {
+        const string pendingVersion = "9999.2.2.6";
+        var newerCachedVersions = new[]
+        {
+            "9999.3.3.3",
+            "9999.4.4.4",
+            "9999.5.5.5"
+        };
+        foreach (var cachedVersion in newerCachedVersions)
+        {
+            File.WriteAllText(
+                Path.Combine(_tempDir, UpdateService.BuildMsiFileName(cachedVersion, RuntimeInformation.ProcessArchitecture)),
+                cachedVersion);
+        }
+
+        var harness = new UpdateServiceHarness(_tempDir)
+        {
+            ReleaseToReturn = CreateRelease(pendingVersion)
+        };
+        harness.HashResponse = $"{ComputeSha256HexFromContent(harness.DownloadPayload)}  {UpdateService.BuildMsiFileName(pendingVersion, RuntimeInformation.ProcessArchitecture)}";
+
+        using var service = harness.CreateService();
+
+        await service.CheckForUpdatesAsync(downloadAndApply: true);
+
+        Assert.True(File.Exists(service.PendingMsiPath));
+        Assert.Equal(
+            3,
+            Directory.GetFiles(_tempDir, "voxto-*-win-*.msi", SearchOption.TopDirectoryOnly).Length);
+        Assert.False(File.Exists(Path.Combine(
+            _tempDir,
+            UpdateService.BuildMsiFileName("9999.3.3.3", RuntimeInformation.ProcessArchitecture))));
+        Assert.Equal(1, harness.ApplyCallCount);
     }
 
     [Fact]

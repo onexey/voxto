@@ -12,3 +12,5 @@ The selected shortcut is used for both hotkey modes:
 
 - **Toggle** — press once to start, press again to stop.
 - **Push-to-talk** — hold to record, release to stop.
+
+Before sending a recording to Whisper, Voxto checks that it is long enough and contains an audible signal. If the microphone captures only silence, Voxto shows a warning to check the selected input device, input level, and Windows microphone permissions instead of saving a likely hallucinated transcription.

@@ -16,6 +16,7 @@ public class RecorderService : IDisposable
 {
     private static readonly TimeSpan RecordingStoppedTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan MinimumTranscribableAudioDuration = TimeSpan.FromMilliseconds(500);
+    private const float MinimumAudiblePeak = 0.001f;
 
     private AppSettings _settings;
     private readonly OutputManager _outputManager;
@@ -275,6 +276,28 @@ public class RecorderService : IDisposable
             if (reader.Length <= 0 || reader.TotalTime < minimumDuration)
             {
                 failureMessage = "Recording was too short. Hold the hotkey a little longer and try again.";
+                return false;
+            }
+
+            var sampleProvider = reader.ToSampleProvider();
+            var samples = new float[4096];
+            var hasAudibleSignal = false;
+            int samplesRead;
+            while (!hasAudibleSignal && (samplesRead = sampleProvider.Read(samples)) > 0)
+            {
+                for (var i = 0; i < samplesRead; i++)
+                {
+                    if (Math.Abs(samples[i]) >= MinimumAudiblePeak)
+                    {
+                        hasAudibleSignal = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasAudibleSignal)
+            {
+                failureMessage = "No audible audio was captured. Check your microphone, input level, and Windows microphone permissions.";
                 return false;
             }
         }

@@ -37,6 +37,7 @@ public sealed class UpdateService : IDisposable
     private const string Owner   = "onexey";
     private const string Repo    = "voxto";
     private const string ApiBase = $"https://api.github.com/repos/{Owner}/{Repo}";
+    private const int CachedUpdateVersionsToKeep = 3;
 
     // Cache directory inside the existing Voxto data folder.
     private static readonly string DefaultUpdateCacheDir = Path.Combine(
@@ -146,6 +147,7 @@ public sealed class UpdateService : IDisposable
     public void Start()
     {
         Stop(); // cancel any existing loop before creating a new one
+        PruneOldUpdateInstallers(_updateCacheDir, CachedUpdateVersionsToKeep, PendingMsiPath);
         _cts            = new CancellationTokenSource();
         _backgroundLoop = Task.Run(() => PeriodicCheckLoopAsync(_cts.Token));
     }
@@ -423,6 +425,7 @@ public sealed class UpdateService : IDisposable
 
         Log.Information("Update {Version} downloaded and verified", PendingVersion);
         PendingMsiPath = destPath;
+        PruneOldUpdateInstallers(_updateCacheDir, CachedUpdateVersionsToKeep, destPath);
         PersistLastCheckTime();
 
         if (applyAfterDownload)
@@ -521,6 +524,89 @@ public sealed class UpdateService : IDisposable
         var hash       = sha.ComputeHash(file);
         var actual     = Convert.ToHexString(hash);
         return string.Equals(actual, expectedHex, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static void PruneOldUpdateInstallers(
+        string updateCacheDir,
+        int versionsToKeep,
+        string? installerToKeep = null)
+    {
+        if (versionsToKeep < 1)
+            throw new ArgumentOutOfRangeException(nameof(versionsToKeep));
+
+        if (!Directory.Exists(updateCacheDir))
+            return;
+
+        List<(string Path, Version Version)> installers;
+        try
+        {
+            installers = Directory
+                .EnumerateFiles(updateCacheDir, "voxto-*-win-*.msi", SearchOption.TopDirectoryOnly)
+                .Select(path => (Path: path, Version: TryParseUpdateInstallerVersion(path)))
+                .Where(installer => installer.Version is not null)
+                .Select(installer => (installer.Path, installer.Version!))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Failed to inspect update cache {Directory}", updateCacheDir);
+            return;
+        }
+
+        var protectedVersion = installerToKeep is null
+            ? null
+            : TryParseUpdateInstallerVersion(installerToKeep);
+        var retainedVersions = installers
+            .Select(installer => installer.Version)
+            .Distinct()
+            .Where(version => version != protectedVersion)
+            .OrderByDescending(version => version)
+            .Take(versionsToKeep - (protectedVersion is null ? 0 : 1))
+            .ToHashSet();
+
+        if (protectedVersion is not null)
+            retainedVersions.Add(protectedVersion);
+
+        var obsoleteInstallers = installers
+            .Where(installer => !retainedVersions.Contains(installer.Version));
+
+        foreach (var installer in obsoleteInstallers)
+        {
+            try
+            {
+                File.Delete(installer.Path);
+                Log.Information(
+                    "Deleted cached update installer {Installer} for version {Version}",
+                    installer.Path,
+                    installer.Version);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warning(ex, "Failed to delete cached update installer {Installer}", installer.Path);
+            }
+        }
+    }
+
+    private static Version? TryParseUpdateInstallerVersion(string path)
+    {
+        const string prefix = "voxto-";
+        string[] architectureSuffixes = ["-win-x64.msi", "-win-arm64.msi"];
+        var fileName = Path.GetFileName(path);
+
+        if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var suffix = architectureSuffixes.FirstOrDefault(candidate =>
+            fileName.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (suffix is null)
+            return null;
+
+        var versionText = fileName[prefix.Length..^suffix.Length];
+        return Version.TryParse(versionText, out var version)
+            && version.Revision >= 0
+            && string.Equals(version.ToString(4), versionText, StringComparison.Ordinal)
+            ? version
+            : null;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

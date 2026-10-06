@@ -73,7 +73,7 @@ Settings are stored in `%LocalAppData%\Voxto\settings.json` alongside all other 
 
 ## Update cache
 
-Downloaded MSI files are stored in `%LocalAppData%\Voxto\updates\`. They are not automatically deleted after a successful update; you can remove them manually if disk space is a concern. Future versions may add automatic cleanup.
+Downloaded MSI files are stored in `%LocalAppData%\Voxto\updates\`. On startup and after a new installer is downloaded and verified, Voxto automatically deletes installers older than the newest three cached versions. Unrelated files and unrecognized installer names are left untouched.
 
 ## msiexec install log
 

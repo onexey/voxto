@@ -136,7 +136,7 @@ public sealed class RecorderServiceTests : IDisposable
             () => recorder);
 
         await service.StartRecordingAsync();
-        recorder.RaiseDataAvailable(new byte[20000]);
+        recorder.RaiseDataAvailable(CreateAudiblePcmBuffer(20000));
 
         var stopTask = service.StopAndTranscribeAsync();
 
@@ -243,7 +243,7 @@ public sealed class RecorderServiceTests : IDisposable
             () => recorders.Dequeue());
 
         Assert.True(await service.StartRecordingAsync("first"));
-        firstRecorder.RaiseDataAvailable(new byte[20000]);
+        firstRecorder.RaiseDataAvailable(CreateAudiblePcmBuffer(20000));
 
         var stopTask = service.StopAndTranscribeAsync("first stop");
         firstRecorder.RaiseRecordingStopped();
@@ -277,7 +277,7 @@ public sealed class RecorderServiceTests : IDisposable
             () => recorder);
 
         Assert.True(await service.StartRecordingAsync("first"));
-        recorder.RaiseDataAvailable(new byte[20000]);
+        recorder.RaiseDataAvailable(CreateAudiblePcmBuffer(20000));
 
         var firstStopTask = service.StopAndTranscribeAsync("first stop");
         var secondStopAccepted = await service.StopAndTranscribeAsync("second stop");
@@ -417,15 +417,65 @@ public sealed class RecorderServiceTests : IDisposable
         Assert.False(File.Exists(audioPath));
     }
 
-    private string CreateTempAudioFile(TimeSpan? duration = null)
+    [Fact]
+    public async Task TranscribeFileAsync_WhenRecordingContainsNoAudibleAudio_RaisesMicrophoneFailureWithoutTranscribing()
+    {
+        var transcribeCalled = false;
+        var service = new RecorderService(
+            new AppSettings(),
+            new OutputManager(new SpyOutput()),
+            _ =>
+            {
+                transcribeCalled = true;
+                return Task.FromResult<IReadOnlyList<(TimeSpan Start, TimeSpan End, string Text)>>([]);
+            });
+        var audioPath = CreateTempAudioFile(silent: true);
+        string? failureMessage = null;
+
+        service.TranscriptionFailed += (_, error) => failureMessage = error;
+
+        await service.TranscribeFileAsync(1, audioPath, deleteAfterTranscribe: true);
+
+        Assert.Equal(
+            "No audible audio was captured. Check your microphone, input level, and Windows microphone permissions.",
+            failureMessage);
+        Assert.False(transcribeCalled);
+        Assert.False(File.Exists(audioPath));
+    }
+
+    private string CreateTempAudioFile(TimeSpan? duration = null, bool silent = false)
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.wav");
         using var writer = new WaveFileWriter(path, new WaveFormat(16000, 16, 1));
         var byteCount = (int)Math.Max(
             writer.WaveFormat.BlockAlign,
             (duration ?? TimeSpan.FromSeconds(1)).TotalSeconds * writer.WaveFormat.AverageBytesPerSecond);
-        writer.Write(new byte[byteCount], 0, byteCount);
+        var audio = new byte[byteCount];
+        if (!silent)
+        {
+            const short sample = 1000;
+            for (var i = 0; i + 1 < audio.Length; i += sizeof(short))
+            {
+                audio[i] = (byte)(sample & 0xff);
+                audio[i + 1] = (byte)(sample >> 8);
+            }
+        }
+
+        writer.Write(audio, 0, audio.Length);
         return path;
+    }
+
+    private static byte[] CreateAudiblePcmBuffer(int byteCount)
+    {
+        var audio = new byte[byteCount];
+        const short sample = 1000;
+        for (var i = 0; i + 1 < audio.Length; i += sizeof(short))
+        {
+            audio[i] = (byte)(sample & 0xff);
+            audio[i + 1] = (byte)(sample >> 8);
+        }
+
+        return audio;
     }
 
     private sealed class SpyOutput : ITranscriptionOutput
